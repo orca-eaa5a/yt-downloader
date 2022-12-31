@@ -1,0 +1,82 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {},
+	"launch": {
+		"configurations": [
+			{
+				"type": "aws-sam",
+				"request": "direct-invoke",
+				"name": "youtube-api-proxy:HelloWorldFunction (python3.9)",
+				"invokeTarget": {
+					"target": "template",
+					"templatePath": "${workspaceFolder}/youtube-api-proxy/template.yaml",
+					"logicalId": "HelloWorldFunction"
+				},
+				"lambda": {
+					"payload": {},
+					"environmentVariables": {},
+					"runtime": "python3.9"
+				}
+			},
+			{
+				"type": "aws-sam",
+				"request": "direct-invoke",
+				"name": "API youtube-api-proxy:HelloWorldFunction (python3.9)",
+				"invokeTarget": {
+					"target": "api",
+					"templatePath": "${workspaceFolder}/youtube-api-proxy/template.yaml",
+					"logicalId": "HelloWorldFunction"
+				},
+				"api": {
+					"path": "/hello",
+					"httpMethod": "get",
+					"payload": {
+						"json": {}
+					}
+				},
+				"lambda": {
+					"runtime": "python3.9"
+				}
+			},
+			{
+				"type": "aws-sam",
+				"request": "direct-invoke",
+				"name": "test-lambda:HelloWorldFunction (python3.9)",
+				"invokeTarget": {
+					"target": "template",
+					"templatePath": "${workspaceFolder}/test-lambda/template.yaml",
+					"logicalId": "HelloWorldFunction"
+				},
+				"lambda": {
+					"payload": {},
+					"environmentVariables": {},
+					"runtime": "python3.9"
+				}
+			},
+			{
+				"type": "aws-sam",
+				"request": "direct-invoke",
+				"name": "API test-lambda:HelloWorldFunction (python3.9)",
+				"invokeTarget": {
+					"target": "api",
+					"templatePath": "${workspaceFolder}/test-lambda/template.yaml",
+					"logicalId": "HelloWorldFunction"
+				},
+				"api": {
+					"path": "/hello",
+					"httpMethod": "get",
+					"payload": {
+						"json": {}
+					}
+				},
+				"lambda": {
+					"runtime": "python3.9"
+				}
+			}
+		]
+	}
+}
