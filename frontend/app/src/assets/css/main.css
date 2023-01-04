@@ -447,7 +447,15 @@ html {
     -webkit-padding-start: 0;
     -webkit-padding-end: 0;
   }
+  /*
   
+   */
+  .w-100{
+    width:100%;
+  }
+  .h-100{
+    height: 100%;
+  }
   /*===============================
   =            Choices            =
   ===============================*/
@@ -861,7 +869,7 @@ html {
     padding: 10px 32px 10px 70px;
     font-size: 25px;
     color: #666;
-    border-radius: 34px;
+    border-radius: 34px 0px 0px 34px;
   }
   
   .s006 form .inner-form .input-field input.placeholder {

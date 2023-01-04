@@ -1,8 +1,8 @@
 
 // import HelloWorld from '@/components/HelloWorld'
-import Main from '@/pages/Main'
+import Main from '@/pages/Main';
 
-import { createRouter, createMemoryHistory } from 'vue-router';
+import { createRouter, createWebHistory } from 'vue-router';
 const routes = [
   {
     path: '/',
@@ -12,7 +12,7 @@ const routes = [
 ]
 
 const router = new createRouter({
-  history: createMemoryHistory(),
+  history: createWebHistory(),
   routes: routes
 });
 
