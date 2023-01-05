@@ -17,6 +17,10 @@ class MpegParser(object):
             MpegParser.Track.video_track: [],
             MpegParser.Track.sound_track: [],
         }
+        self.chunk_arr = {
+            MpegParser.Track.video_track: [],
+            MpegParser.Track.sound_track: [],
+        }
         pass
 
     def set_binary(self, _bin):
@@ -32,6 +36,12 @@ class MpegParser(object):
 
         return int(track_duration/track_timescale)
 
+    def get_chunk_arr(self, track='video_track'):
+        return self.chunk_arr[track]
+    
+    def get_sample_arr(self, track='video_track'):
+        return self.sample_arr[track]
+
     def get_sample_atom_arr(self, track='video_track'):
         return getattr(self.moov, track).mida.minf.stbl.stts.sample_atom_arr
 
@@ -40,9 +50,6 @@ class MpegParser(object):
         for atom in self.get_sample_atom_arr(track):
             count += atom['sample_count']
         return count
-
-    def get_sample_arr(self, track='video_track'):
-        return self.sample_arr[track]
 
     def make_sample_arr(self, track='video_track'):
         chunk_info_arr = self.get_chunk_info_arr(track)
@@ -94,6 +101,60 @@ class MpegParser(object):
             sample_idx += 1
             if sample_per_chunk_cnt != 0 and (sample_per_chunk_cnt % chunk_info['samples_per_chunk'] == 0):
                 cur_chunk_idx += 1
+
+    def make_chunk_arr(self, track='video_track'):
+        # chunk timestamp, chunk offset, chunk size number_of_samples, prev_sample_count
+        chunk_info_arr = self.get_chunk_info_arr(track)
+        sample_size_arr = self.get_sample_size_arr(track)
+        chunk_offset_arr = self.get_chunk_offset_arr(track)
+        sample_per_sec_arr = self.get_samples_per_sec_arr(track)
+
+        chunk_info_arr_idx = 0
+        sample_per_sec_arr_idx = 0
+        sample_count = 0
+        timestamp = 0
+        next_chunk_info = None
+        for chunk_idx in range(1, len(chunk_offset_arr)+1):
+            try:
+                if not next_chunk_info:
+                    next_chunk_info = chunk_info_arr[chunk_info_arr_idx+1]
+                if next_chunk_info['first_chunk'] == chunk_idx:
+                    chunk_info_arr_idx += 1
+                    next_chunk_info = chunk_info_arr[chunk_info_arr_idx+1]
+            except IndexError as ie:
+                next_chunk_info = None
+                pass
+            finally:
+                cur_chunk_info = chunk_info_arr[chunk_info_arr_idx]
+            chunk_size = 0
+            for i in range(cur_chunk_info['samples_per_chunk']):
+                self.sample_arr[track].append(
+                    {
+                        'chunk_idx':  chunk_idx,
+                        'sample_idx': sample_count,
+                        'sample_offset': chunk_offset_arr[chunk_idx-1] + chunk_size, 
+                        'sample_size': sample_size_arr[sample_count]
+                    }
+                )
+                chunk_size += sample_size_arr[sample_count]
+                print(chunk_idx, sample_count)
+                sample_count += 1
+            base_sample_index = sample_count - cur_chunk_info['samples_per_chunk']
+            if base_sample_index > sample_per_sec_arr[sample_per_sec_arr_idx]['sample_count']:
+                sample_per_sec_arr_idx+=1
+            
+            timestamp = base_sample_index/sample_per_sec_arr[sample_per_sec_arr_idx]['samples_per_sec']
+
+            self.chunk_arr[track].append({
+                'chunk_idx': chunk_idx,
+                'chunk_offset': chunk_offset_arr[chunk_idx-1],
+                'start_sample_idx': base_sample_index,
+                'number_of_samples': cur_chunk_info['samples_per_chunk'],
+                'chunk_size': chunk_size,
+                'timestamp': timestamp
+            })
+        
+
 
     def get_samples_per_sec_arr(self, track='video_track'):
         """
@@ -153,39 +214,19 @@ class MpegParser(object):
     def get_duration(self):
         return int(self.moov.video_track.tkhd.duration / self.moov.mvhd.timescale)
 
-    def get_chunk_idx_from_sample_idx(self, sample_idx, track='video_track'):
-        """
-        sample_index를 기반으로, sample이 포함된 chunk를 가져옵니다.
-        ! sample_index는 0부터 시작합니다.
-        ! chunk_indexsms 1부터 시작합니다
-
-        ret:
-        chunk_index
-        """
-        chunk_info_arr = self.get_chunk_info_arr(track)
-        if not chunk_info_arr:
-            logging.error('[get_chunk_idx_from_sample_idx] fail to get chunk_info_arr')
-            assert False
-        prev_chunk_info = chunk_info_arr[0]
-        for chunk_info in chunk_info_arr[1:]:
-            sample_idx -= ((chunk_info['first_chunk'] - prev_chunk_info['first_chunk'])*prev_chunk_info['samples_per_chunk'])
-            cur_chunk_sample_count = ((chunk_info['first_chunk'] - prev_chunk_info['first_chunk'])*prev_chunk_info['samples_per_chunk'])
-            if cur_chunk_sample_count >= sample_idx:
-                return chunk_info['first_chunk'] + int(sample_idx/chunk_info['samples_per_chunk'])
-        
-        return 1
-
     def get_chunk_by_sample_index(self, sample_index, track='video_track'):
         """
         sample_index를 기반으로, sample이 포함된 chunk를 가져옵니다.
         ! sample_index는 0부터 시작합니다.
 
         ret:
-        chunk_index
+        
         """
-        return self.get_chunk_by_index(
-            self.get_chunk_idx_from_sample_idx(sample_index, track), track
-        )
+        for chunk_i in self.get_chunk_arr(track):
+            if chunk_i['start_sample_idx'] <= sample_index and sample_index < chunk_i['start_sample_idx'] + chunk_i['number_of_samples']:
+                return chunk_i
+        logging.error('[get_chunk_by_sample_index] invalid index')
+        assert False
 
     def get_chunk_by_index(self, index, track='video_track'):
         """
@@ -194,82 +235,18 @@ class MpegParser(object):
         ! index는 1부터 시작합니다
 
         ret:
-        chunk_offset, chunk_size, sample_index, samples_per_chunk
+        'chunk_idx': chunk_idx,
+        'chunk_offset': start file offset of chunk
+        'start_sample_idx': start offset of sample in chunk
+        'number_of_samples': number of samples that chunk contained
+        'chunk_size': chunk_size,
+        'timestamp': timestamp of video that chunk coresspond
         """
-        sample_arr = self.get_sample_arr(track)
-        chunk_info_arr = self.get_chunk_info_arr(track)
-        chunk_offset_arr = self.get_chunk_offset_arr(track)
-
-        i = 0
-        j = 0
-        while True:
-            if chunk_info_arr[i]['first_chunk'] == sample_arr[j]['chunk_idx']:
-                break
-            else:
-                j += chunk_info_arr[i]['samples_per_chunk']
-                i += 1
-                assert len(sample_arr) >= j
-        k = j
-        for sample in sample_arr[k:]:
-            if sample['chunk_idx'] == index:
-                break
-            j += 1
-        
-        chunk_offset = chunk_offset_arr[index-1]
-        chunk_size = 0
-        sample_index = sample_arr[j]['sample_idx']
-        samples_per_chunk = chunk_info_arr[i]['samples_per_chunk']
-
-        for sample in sample_arr[j:]:
-            if index != sample['chunk_idx']:
-                break
-            chunk_size += sample['sample_size']
-        
-        return chunk_offset, chunk_size, sample_index, samples_per_chunk
-
-    def get_sample_by_time(self, time_str, track='video_track'):
-        """
-        desc:
-        시간 값에 맞는 sample을 가져옵니다.
-
-        ret:
-        sample_offset, sample_size, sample_timestamp
-        """
-        _time, _pow = 0, 0
-        sample_arr = self.get_sample_arr(track)
         try:
-            time_arr = [int(f) for f in time_str.split(':')]
-        except ValueError as ve:
-            logger.error('[get_chunk_by_time] : invalid time format')
-            assert False
-        time_arr.reverse()
-        for t in time_arr:
-            _time += pow(60, _pow) * t
-        del time_arr
-
-        duration = self.get_duration()
-        if _time > duration:
-            logger.error('[get_chunk_by_time] : invalid requested time')
-            assert False
-        
-        samples_per_sec_arr = self.get_samples_per_sec_arr(track)
-        sample_idx = 0
-        cur_duration = 0
-        remain_duration = _time
-        for sample_count_per_sec in samples_per_sec_arr:
-            if cur_duration > _time:
-                logger.error('[get_chunk_by_time] : 뭔가 잘못되었다')
-                assert False
-            else:
-                if remain_duration >= sample_count_per_sec['duration']:
-                    remain_duration -= sample_count_per_sec['duration']
-                    sample_idx += sample_count_per_sec['sample_count']
-                    cur_duration += sample_count_per_sec['duration']
-                else:
-                    sample_idx += (sample_count_per_sec['samples_per_sec']*remain_duration)
-                    cur_duration += remain_duration
-                    break
-        return sample_arr[sample_idx]['sample_offset'], sample_arr[sample_idx]['sample_size'], cur_duration
+            return self.get_chunk_arr(track)[index]
+        except IndexError as ie:
+            logging.error('[get_chunk_by_index] invalid index')
+        assert False
 
     def get_chunk_by_time(self, time_str, track='video_track'):
         """
@@ -282,10 +259,76 @@ class MpegParser(object):
         ret:
         chunk_offset, chunk_size, sample_index, samples_per_chunk
         """
+        timestamp, _pow = 0, 0
+        sample_arr = self.get_sample_arr(track)
+        try:
+            time_arr = [int(f) for f in time_str.split(':')]
+        except ValueError as ve:
+            logger.error('[get_chunk_by_time] : invalid time format')
+            assert False
+        time_arr.reverse()
+        for t in time_arr:
+            timestamp += pow(60, _pow) * t
+        del time_arr
 
-        sample_offset, _, _ = self.get_sample_by_time(track)
+        done = False
+        chunk_arr = self.get_chunk_arr(track)
+        prev_chunk_i = chunk_arr[0]
+        for chunk_i in chunk_arr:
+            if chunk_i['timestamp'] > timestamp:
+                done = True
+                break
+            prev_chunk_i = chunk_i
         
-        return self.get_chunk_by_offset(sample_offset, track)
+        if timestamp != 0 and not done:
+            logger.error('[get_chunk_by_time] : timestamp is not in duration')
+            assert False
+
+        return prev_chunk_i
+        
+    # def get_sample_by_time(self, time_str, track='video_track'):
+    #     """
+    #     desc:
+    #     시간 값에 맞는 sample을 가져옵니다.
+
+    #     ret:
+    #     sample_offset, sample_size, sample_timestamp
+    #     """
+    #     _time, _pow = 0, 0
+    #     sample_arr = self.get_sample_arr(track)
+    #     try:
+    #         time_arr = [int(f) for f in time_str.split(':')]
+    #     except ValueError as ve:
+    #         logger.error('[get_chunk_by_time] : invalid time format')
+    #         assert False
+    #     time_arr.reverse()
+    #     for t in time_arr:
+    #         _time += pow(60, _pow) * t
+    #     del time_arr
+
+    #     duration = self.get_duration()
+    #     if _time > duration:
+    #         logger.error('[get_chunk_by_time] : invalid requested time')
+    #         assert False
+        
+    #     samples_per_sec_arr = self.get_samples_per_sec_arr(track)
+    #     sample_idx = 0
+    #     cur_duration = 0
+    #     remain_duration = _time
+    #     for sample_count_per_sec in samples_per_sec_arr:
+    #         if cur_duration > _time:
+    #             logger.error('[get_chunk_by_time] : 뭔가 잘못되었다')
+    #             assert False
+    #         else:
+    #             if remain_duration >= sample_count_per_sec['duration']:
+    #                 remain_duration -= sample_count_per_sec['duration']
+    #                 sample_idx += sample_count_per_sec['sample_count']
+    #                 cur_duration += sample_count_per_sec['duration']
+    #             else:
+    #                 sample_idx += (sample_count_per_sec['samples_per_sec']*remain_duration)
+    #                 cur_duration += remain_duration
+    #                 break
+    #     return sample_arr[sample_idx]['sample_offset'], sample_arr[sample_idx]['sample_size'], cur_duration
 
     def get_chunk_by_offset(self, offset, track='video_track'):
         """
@@ -295,18 +338,20 @@ class MpegParser(object):
         chunk의 시작 sample을 가져옵니다.
 
         ret:
-        chunk_offset, chunk_size, samples
+        chunk_offset, chunk_size, samples_per_chunk
         """
-        chunk_offset_arr = self.get_chunk_offset_arr(track)
-        prev_offset = chunk_offset_arr[0]
-        chunk_index = 1
-        for chunk_offset in chunk_offset_arr[1:]:
-            if prev_offset <= offset and offset < chunk_offset:
-                return chunk_index
-            chunk_index += 1
-            prev_offset = chunk_offset
+        done = False
+        chunk_arr = self.get_chunk_arr(track)
+        prev_chunk_i = chunk_arr[0]
+        for chunk_i in chunk_arr:
+            if chunk_i['chunk_offset'] > offset:
+                done = True
+                break
+        if not done:
+            logger.error('[get_chunk_by_offset] : invalid offset')
+            assert False
         
-        return self.get_chunk_by_index(chunk_index, track)
+        return prev_chunk_i
 
     def get_sample_by_index(self, index, track='video_track'):
         """
@@ -316,10 +361,13 @@ class MpegParser(object):
         ret:
         sample_offset, sample_size
         """
-        sample_arr = self.get_sample_arr(track)
-        sample = sample_arr[index]
+        try:
+            sample = self.get_sample_arr(track)[index]
+        except IndexError as ie:
+            logger.error('[get_sample_by_index] : invalid index')
+            assert False
 
-        return sample['sample_offset'], sample['sample_size']
+        return sample
 
     def get_sample_by_offset(self, offset, track):
         """
@@ -331,22 +379,20 @@ class MpegParser(object):
         ret:
         sample_offset, sample_size
         """
-
+        chunk = self.get_chunk_by_offset(offset, track)
+        idx = 0
         sample_arr = self.get_sample_arr(track)
-        chunk_offset_arr = self.get_chunk_offset_arr(track)
-        chunk_index = 1
-        for chunk_offset in chunk_offset_arr:
-            if chunk_offset <= offset:
-                break
-            chunk_index += 1
-        
-        _, _, sample_index, _ = self.get_chunk_by_index(chunk_index, track)
-        _sample = None
-        for sample in sample_arr[sample_index:]:
+        _prev = sample_arr[chunk['start_sample_idx']]
+        for sample in sample_arr[chunk['start_sample_idx']:]:
+            if chunk['number_of_samples'] == idx:
+                logger.error('[get_sample_by_offset] : invalid offset')
+                assert False
+            idx += 1
             if sample['sample_offset'] > offset:
-                break
-            _sample = sample
-        return _sample['sample_offset'], _sample['sample_size']
+                return _prev
+            _prev = sample
+        
+        assert False
 
     def parse_ftype(self):
         ftyp_header = AtomBoxHeader.from_buffer(bytearray(self.binary))
@@ -363,7 +409,7 @@ class MpegParser(object):
     def parse_header(self):
         self.parse_ftype()
         self.parse_moov()
-        parser.make_sample_arr()
+        parser.make_chunk_arr()
 
     def parse_full(self):
         self.parse_header()
@@ -373,24 +419,38 @@ class MpegTool(object):
     def __init__(self) -> None:
         self.parser = MpegParser()
         pass
-    
-    def merge(self, mp4_header, mp4_stream, stream_timestamp):
+
+    def trim(self, src, start_timestamp, duration):
         """
         src : mp4 header가 포함된 binary
-        dst : mp4 stream
-        stream_timestamp : stream의 원래 시작 시간 정보
-        mp4 binary 바로 뒤에 mp4 stream을 붙혀 연속적으로 재생될 수 있게 한다.
-        1. stts 수정 필요
-            - stream_timestamp와 sample_delta 기반으로 sample_count 수 조절 또는 배열 수정
-        2. stsc 수정 필요
-        3. stco 수정 필요
-        4. stsz 수정 필요
-        5. stss 수정 필요? <-- 확인 필요
+        start_timestamp : trim의 시작지점
+        duration : trim한 동영상의 running time
         """
-        self.parser.set_binary(mp4_header)
+        self.parser.set_binary(src)
         self.parser.parse_header()
-        o_chunk_offset, chunk_size, o_sample_index, samples_per_chunk = self.parser.get_chunk_by_time(stream_timestamp)
+        chunk_i = self.parser.get_chunk_by_time(start_timestamp, 'video_track')
         
+        # step1 > stts 수정
+        # - 현재 chunk 앞에 몇 개의 sample이 있는지 확인 후, stts 헤더 수정
+        # - 지워지는 sample 만큼 sample_count 삭제
+        stts_info = self.parser.get_samples_per_sec_arr('video_track')
+        removed_sample_count = chunk_i['start_sample_idx'] + 1
+        for s in stts_info:
+            if s['sample_count'] <= removed_sample_count:
+                stts_info.pop(0)
+                removed_sample_count -= s['sample_count']
+            else:
+                s['sample_count'] -= removed_sample_count
+
+        # step2 > stsc 수정
+        # - 현재 chunk 앞에 몇 개의 chunk가 있는지 확인 후, stsc 헤더 수정
+        removed_chunk = chunk_i['chunk_idx']
+        
+        # 현재 chunk 앞에 몇 개의 sample이 있는지 확인 후, stts 헤더 수정
+        # - 지워지는 sample 만큼 sample_count 삭제
+
+
+
 
 if __name__ == '__main__':
     _bin = b''
@@ -398,6 +458,8 @@ if __name__ == '__main__':
         _bin = f.read()
     parser = MpegParser()
     parser.set_binary(_bin)
-    parser.parse()
-    parser.get_chunk_by_time('2')
+    parser.parse_full()
+    chunk_arr = parser.chunk_arr['video_track']
+    sample_arr = parser.sample_arr['video_track']
+    print(parser.get_chunk_by_sample_index(74))
     pass

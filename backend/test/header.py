@@ -1,5 +1,6 @@
 import ctypes
 from io import BytesIO
+from pymp4.parser import *
 
 class AtomBoxHeader(ctypes.BigEndianStructure):
     _fields_ = [
@@ -310,7 +311,7 @@ class Track(AtomBox):
 class MOOV(AtomBox):
     def __init__(self, header: AtomBoxHeader, data: bytes) -> None:
         super().__init__(header, data)
-        self.mvhd = None
+        self.mvhd = MovieHeaderBox
         self.video_track = None
         self.sound_track = None
         self.udta = None
