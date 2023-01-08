@@ -1,6 +1,5 @@
 import logging
 import copy
-from header import *
 from pymp4.parser import Box
 from pymp4.util import BoxUtil
 
@@ -34,13 +33,17 @@ class PyMp4Wrapper(object):
 
     def parse(self):
         try:
-            self.ftype = Box.parse(self.raw)
+            self. v = Box.parse(self.raw)
         except OSError as e:
             logging.error('[parse] invalid mp4 format binary')
             assert 0
 
         try:
+            self.ftype = Box.parse(self.raw)
             self.moov = Box.parse(self.raw[self.ftype.end:])
+            # parse_test = Box.parse(self.raw[
+            #     BoxUtil.first(self.moov, b'stco').end+self.ftype.end : 
+            #     ])
         except OSError as e:
             logging.error('[parse] invalid mp4 format binary or moov header is not located in front of the mdat')
             assert 0
@@ -54,7 +57,8 @@ class PyMp4Wrapper(object):
             else:
                 self.sound_track = trak
 
-        self.make_chunk_arr()
+        self.make_chunk_arr('video_track')
+        self.make_chunk_arr('sound_track')
 
 
     def get_running_time(self, track='video_track'):
@@ -83,6 +87,9 @@ class PyMp4Wrapper(object):
     
     def get_sample_atom_arr(self, track='video_track'):
         return BoxUtil.first(getattr(self, track), b'stts').entries
+    
+    def get_sync_sample_arr(self):
+        return BoxUtil.first(getattr(self, 'video_track'), b'stss').entries
 
     def make_chunk_arr(self, track='video_track'):
         # chunk timestamp, chunk offset, chunk size number_of_samples, prev_sample_count
@@ -206,7 +213,7 @@ class PyMp4Wrapper(object):
             logging.error('[get_chunk_by_index] invalid index')
         assert False
 
-    def get_chunk_by_time(self, time_str, track='video_track'):
+    def get_chunk_by_time(self, time_str, track='video_track', time_offset=0):
         """
         desc:
         시간 값에 맞는 chunk를 가져옵니다.
@@ -218,7 +225,7 @@ class PyMp4Wrapper(object):
         chunk_offset, chunk_size, sample_index, samples_per_chunk
         """
         timestamp, _pow = 0, 0
-        sample_arr = self.get_sample_arr(track)
+        
         try:
             time_arr = [int(f) for f in time_str.split(':')]
         except ValueError as ve:
@@ -229,6 +236,7 @@ class PyMp4Wrapper(object):
             timestamp += pow(60, _pow) * t
         del time_arr
 
+        timestamp += time_offset
         done = False
         chunk_arr = self.get_chunk_arr(track)
         prev_chunk_i = chunk_arr[0]
@@ -313,6 +321,32 @@ class MpegTool(object):
         self.parser = PyMp4Wrapper()
         pass
 
+    def edit_mvhd_duration(self, moov, duration:int):
+        """
+        :duration
+            - time seconds
+        """
+        mvhd = BoxUtil.first(moov, b'mvhd')
+        mvhd.duration = mvhd.timescale * duration
+        pass
+    
+    def edit_track_duration(self, moov, duration:int, track):
+        """
+        :duration
+            - time seconds
+        :track_type
+            - video_track, sound_track object
+        """
+        timescale = BoxUtil.first(moov, b'mvhd').timescale
+        tkhd = BoxUtil.first(track, b'tkhd')
+        tkhd.duration = timescale * duration
+
+        mdhd = BoxUtil.first(track, b'mdhd')
+        mdhd_timescale = mdhd.timescale
+        mdhd.duration = int(duration * mdhd_timescale)
+        pass
+
+
     def trim(self, src, start_timestamp, duration):
         """
         src : mp4 header가 포함된 binary
@@ -320,31 +354,126 @@ class MpegTool(object):
         duration : trim한 동영상의 running time
         """
         
-        def edit_stts(track, parser, track_type:str):
-            
-            chunk_i = parser.get_chunk_by_time(start_timestamp, track_type)
+        def edit_stts(self, chunk_s, chunk_e, track):    
             stts = BoxUtil.first(track, b'stts')
             stts_etry = stts.entries
-            removed_sample_count = chunk_i['start_sample_idx']
-            
-            for s in stts_etry:
-                tmp = s['sample_count']
-                s['sample_count'] -= removed_sample_count
-                removed_sample_count -= tmp
-                if removed_sample_count <= 0:
-                    break
-            
-            idx = 0
-            while True:
-                if stts_etry[idx]['sample_count'] == 0:
-                    stts_etry.pop(idx)
-                    idx-=1
-                else:
-                    break
-                idx+=1
-            
-            return stts
+            chunk_start_sample_idx = chunk_s['start_sample_idx']
+            chunk_end_sample_idx = chunk_e['start_sample_idx']
+            consumed_sample_cnt = chunk_end_sample_idx - chunk_start_sample_idx
 
+            _range = []
+            prev = None
+            for s in stts_etry:
+                if not _range:
+                    _range.append([0, s['sample_count']-1])
+                    prev = s
+                else:
+                    _range.append([prev['sample_count'], prev['sample_count'] + s['sample_count']])
+            
+            # find the chunk started _range
+            idx = 0
+            for r in _range:
+                if r[0] <= chunk_start_sample_idx and chunk_end_sample_idx < r[1]:
+                    break
+                else:
+                    idx += 1
+            if idx != 0:
+                _range = _range[idx:]
+                stts = stts.entries[idx:]
+            
+            sc = []
+            for r in _range:
+                n_s = r[1] - r[0] + 1
+                if consumed_sample_cnt - n_s < 0:
+                    sc.append(consumed_sample_cnt)
+                else:
+                    sc.append(n_s)
+                    consumed_sample_cnt -= n_s
+            
+            for etry, c in zip(stts.entries, sc):
+                etry.sample_count = c
+
+            return stts
+        
+        def edit_stsc(self, chunk_s, chunk_e, track, track_type):
+            stsc = BoxUtil.first(track, b'stsc')
+            stsc_etry = stsc.entries
+            chunk_start_idx = chunk_s['chunk_idx']
+            chunk_end_idx = chunk_e['chunk_idx']
+            chunk_info_arr = self.parser.get_chunk_info_arr(track_type)
+            _range = []
+            idx = 0
+            for chunk_info in chunk_info_arr:
+                if idx:
+                    _range[idx-1]['last_chunk'] = chunk_info['first_chunk']-1
+                _range.append({
+                        'first_chunk': chunk_info['first_chunk'] - 1,
+                        'last_chunk': 0,
+                        'samples_per_chunk': chunk_info['samples_per_chunk']
+                    })
+                idx += 1
+            if idx:
+                _range[-1]['last_chunk'] = chunk_info['first_chunk']
+            
+            idx2 = 0
+            for r in _range:
+                if chunk_end_idx < r['first_chunk']:
+                    break
+                idx2 += 1
+            
+            _range = _range[:idx2]
+            idx1 = 0
+            delta = chunk_start_idx
+            for r in _range:
+                if r['last_chunk'] - delta > 0:
+                    r['first_chunk'] = r['first_chunk'] - delta
+                    if r['first_chunk'] < 0:
+                        r['first_chunk'] = 0
+                    r['last_chunk'] -= delta
+                else:
+                    idx1 += 1
+            _range = _range[idx1:]
+
+            stsc.entries = stsc_etry[idx1:idx2]
+            for e, r in zip(stsc.entries, _range):
+                e.first_chunk = r['first_chunk']+1
+
+            return stsc
+
+        def edit_stco(self, chunk_s, chunk_e, track, track_type):
+            stco = BoxUtil.first(track, b'stco')
+            stco.entries = stco.entries[chunk_s['chunk_idx']:chunk_e['chunk_idx']]
+
+            return stco
+        
+        def edit_stsz(self, chunk_s, chunk_e, track, track_type):
+            stsz = BoxUtil.first(track, b'stsz')
+            stsz_etry = stsz.entry_sizes
+            stsz.entry_sizes = stsz.entry_sizes[
+                chunk_s['start_sample_idx']:chunk_e['start_sample_idx']
+            ]
+            stsz.sample_count = len(stsz.entry_sizes)
+            return stsz
+
+        def edit_stss(self, chunk_s, chunk_e, track, track_type):
+            stss = BoxUtil.first(track, b'stss')            
+            stss_etry = stss.entries
+            idx1 = 0
+            idx2 = 0
+            prev = None
+            for etry in stss_etry:
+                if etry.sample_number < chunk_s['start_sample_idx']:
+                    idx1 += 1
+                if etry.sample_number > chunk_e['start_sample_idx']:
+                    break
+                idx2 += 1
+            stss.entries = stss.entries[idx1:idx2]
+            for etry in stss.entries:
+                etry.sample_number -= chunk_s['start_sample_idx']
+            
+
+            return stss
+                
         self.parser.set_binary(src)
         self.parser.parse()
 
@@ -358,29 +487,91 @@ class MpegTool(object):
             else:
                 sound_track = trak
         
-        if video_track:
-            edit_stts(video_track, self.parser, 'video_track')
-        if sound_track:
-            edit_stts(video_track, self.parser, 'sound_track')
+        self.edit_mvhd_duration(new_moov_header, duration)
+        mdat_start = 0
+        mdat_end = 0
+        for track_type in ['video_track', 'sound_track']:
+            if track_type == 'video_track' and video_track:
+                track = video_track
+            elif track_type == 'sound_track' and sound_track:
+                track = sound_track
+            else:
+                break
+            chunk_s = self.parser.get_chunk_by_time(start_timestamp, track_type)
+            chunk_e = self.parser.get_chunk_by_time(start_timestamp, time_offset=duration, track=track_type)
+            if not mdat_start:
+                mdat_start = chunk_s['chunk_offset']
+            else:
+                if mdat_start > chunk_s['chunk_offset']:
+                    mdat_start = chunk_s['chunk_offset']
+            if not mdat_end:
+                mdat_end = chunk_e['chunk_offset']
+                if mdat_end < chunk_s['chunk_offset']:
+                    mdat_end = chunk_s['chunk_offset']
+                
+            self.edit_track_duration(new_moov_header, duration, track)
+            edit_stts(self, chunk_s, chunk_e, track)
+            edit_stsc(self, chunk_s, chunk_e, track, track_type)
+            edit_stco(self, chunk_s, chunk_e, track, track_type)
+            edit_stsz(self, chunk_s, chunk_e, track, track_type)
+            if track_type == 'video_track' and video_track:
+                edit_stss(self, chunk_s, chunk_e, track, track_type)
         
-        # step2 > stsc 수정
-        # - 현재 chunk 앞에 몇 개의 chunk가 있는지 확인 후, stsc 헤더 수정
+        new_moov_header = Box.parse(Box.build(new_moov_header))
+        new_mmov_header_sz = new_moov_header.end
+
+        mdat = Box.build(dict(
+                type=b'mdat',
+                data=self.parser.raw[mdat_start:mdat_end]
+            ))
         
+        video_track = None
+        track_list = list(BoxUtil.find(new_moov_header, b'trak'))
+        for trak in track_list:
+            stco = BoxUtil.first(trak, b'stco')
+            for etry in stco.entries:
+                etry.chunk_offset = ( etry.chunk_offset - mdat_start + new_mmov_header_sz + self.parser.ftype.end + 8)
+                if etry.chunk_offset <= 0:
+                    assert False
         
-        # 현재 chunk 앞에 몇 개의 sample이 있는지 확인 후, stts 헤더 수정
-        # - 지워지는 sample 만큼 sample_count 삭제
+        """
+        Because of the limitation of pymp4, just copy and past original not modified headers
+        """
+        """
+        1. pasted stsd header
+        """
+        moov_header_bin = bytearray(Box.build(new_moov_header))
+        # o_track_list = list(BoxUtil.find(self.parser.moov, b'trak'))
+        # for trak, o_trak in zip(track_list, o_track_list):
+        #     stsd = BoxUtil.first(trak, b'stsd')
+        #     o_stsd = BoxUtil.first(o_trak, b'stsd')
+        #     o_raw_sz = int.from_bytes(self.parser.raw[self.parser.ftype.end + o_stsd.offset: self.parser.ftype.end + o_stsd.offset + 4], byteorder='big')
+        #     moov_header_bin[stsd.offset:stsd.offset + o_raw_sz] = self.parser.raw[self.parser.ftype.end + o_stsd.offset: self.parser.ftype.end + o_stsd.offset + o_raw_sz]
 
+        """
+        2. pasted 
+        """
 
-
+        return Box.build(self.parser.ftype), bytes(moov_header_bin), mdat
 
 if __name__ == '__main__':
     _bin = b''
-    with open('./video_source/0-3.mp4', 'rb') as f:
+    with open('./video_source/full.mp4', 'rb') as f:
         _bin = f.read()
-    # parser = PyMp4Wrapper()
-    # parser.set_binary(_bin)
-    # parser.parse()
-    # print(parser.get_chunk_by_sample_index(74))
+    parser = PyMp4Wrapper()
+    parser.set_binary(_bin)
+    parser.parse()
     tool = MpegTool()
-    tool.trim(_bin, '2', 4)
-    pass
+    ftyp_raw, moov_raw, mdat = tool.trim(_bin, '9', 5)
+    with open('./video_source/trim.mp4', 'wb') as f:
+        f.write(ftyp_raw)
+        f.write(moov_raw)
+        f.write(mdat)
+
+    # with open('./video_source/trim.mp4', 'rb') as f:
+    #     _bin = f.read()
+    # pw = PyMp4Wrapper()
+    # pw.set_binary(_bin)
+    # pw.parse()
+
+    # pass
