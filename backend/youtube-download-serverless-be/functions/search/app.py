@@ -1,6 +1,5 @@
 import json
 import pytube
-import pymp4
 import requests
 
 

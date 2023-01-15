@@ -3,23 +3,40 @@
         {
             "type": "aws-sam",
             "request": "direct-invoke",
-            "name": "API lambda-youtube-livetrim:YoutubeLiveTrimFunction",
+            "name": "API youtube-download-serverless-be:LiveTrimYoutubeVideoFunction",
             "invokeTarget": {
                 "target": "api",
-                "templatePath": "${workspaceFolder}/lambda-youtube-livetrim/template.yaml",
-                "logicalId": "YoutubeLiveTrimFunction"
+                "templatePath": "${workspaceFolder}/youtube-download-serverless-be/template.yaml",
+                "logicalId": "LiveTrimYoutubeVideoFunction"
             },
             "api": {
                 "path": "/livetrim",
                 "httpMethod": "post",
                 "payload": {
-                    "json": {
-                        "test": 123,
-                        "value": 456
-                    }
+                    "json": {}
                 }
             },
-            "sam":{
+            "sam": {
+                "containerBuild": true
+            }
+        },
+        {
+            "type": "aws-sam",
+            "request": "direct-invoke",
+            "name": "API youtube-download-serverless-be:GetYoutubeVideoInfoFunction",
+            "invokeTarget": {
+                "target": "api",
+                "templatePath": "${workspaceFolder}/youtube-download-serverless-be/template.yaml",
+                "logicalId": "GetYoutubeVideoInfoFunction"
+            },
+            "api": {
+                "path": "/search",
+                "httpMethod": "get",
+                "payload": {
+                    "json": {}
+                }
+            },
+            "sam": {
                 "containerBuild": true
             }
         }
