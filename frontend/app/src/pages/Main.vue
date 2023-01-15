@@ -1,35 +1,39 @@
 <template>
-    <div class="s006">
-        <form>
-            <fieldset>
-                <legend>What are you looking for?</legend>
-                <div class="inner-form">
-                    <div class="input-field">
-                        <!-- <button class="btn-search" type="button">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"></path>
-                        </svg>
-                        </button> -->
-                        <!-- <input id="search" type="text" placeholder="Input Vedio url, Vedio ID here"/> -->
-                        <div class="p-inputgroup">
-                            <InputText placeholder="Keyword"/>
-                            <Button icon="pi pi-search" class="p-button-warning"/>
+    <div class="full-screen">
+        <div class="flex signup-pannel justify-content-end">
+            <Button label="Sign Up" class="p-button-danger signup-button" />
+        </div>
+        <div class="s006">
+            <form>
+                <fieldset>
+                    <div id='main-view'>
+                        <legend>Download Youtube Video with<br>Fast Trimming</legend>
+                        <legend style="opacity: 0">
+                            <img class="p-4" src="@/assets/images/youtube_logo.png" style="width: 400px; height: 400px;" />
+                        </legend>
+                    </div>
+                    <div class="inner-form fade-left-to-right">
+                        <div>
+                            <div class="p-inputgroup" id="searchbar">
+                                <InputText placeholder="Input Youtube Video Link here" class="main-searchbar"/>
+                                <Button icon="pi pi-search" class="p-button-danger"/>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <!--
-                    TODO:
-                    키워드 추천 목록
-                -->
-                <!-- <div class="suggestion-wrap">
-                <span>New Arrivals</span>
-                <span>Ladies</span>
-                <span>Mens</span>
-                <span>Accessories</span>
-                <span>Sale</span>
-                </div> -->
-            </fieldset>
-        </form>
+                    <!--
+                        TODO:
+                        키워드 추천 목록
+                    -->
+                    <!-- <div class="suggestion-wrap">
+                    <span>New Arrivals</span>
+                    <span>Ladies</span>
+                    <span>Mens</span>
+                    <span>Accessories</span>
+                    <span>Sale</span>
+                    </div> -->
+                </fieldset>
+            </form>
+        </div>
     </div>
 </template>
 
@@ -39,11 +43,37 @@ export default {
 }
 </script>
 
-<style lang='scss'>
+<style scoped lang='scss' >
 @import "../assets/css/main.css";
+@import "../assets/css/main-view.css";
+@import "../assets/css/animation.css";
 
-.p-inputgroup button:last-child{
-    border-top-right-radius: 34px !important;
-    border-bottom-right-radius: 34px !important;
+.p-button.p-button-danger{
+    background:rgba(207,34,39,255);
+    min-width: 60px;
 }
+
+.signup-button{
+    padding: 10px;
+    margin: 30px 30px 0px 0px;
+    height: 40px;
+    min-width: 100px !important;
+    background-color: rgb(254, 114, 114) !important;
+    border-radius: 20px;
+}
+
+.main-searchbar{
+    font-size: 14pt;
+    font-weight: 500;
+}
+
+.signup-pannel{
+    min-width: 100vh;
+    margin-bottom: 4rem;
+}
+
+// .p-inputgroup button:last-child{
+//     border-top-right-radius: 34px !important;
+//     border-bottom-right-radius: 34px !important;
+// }
 </style>

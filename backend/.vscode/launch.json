@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "type": "aws-sam",
+            "request": "direct-invoke",
+            "name": "API lambda-youtube-livetrim:YoutubeLiveTrimFunction",
+            "invokeTarget": {
+                "target": "api",
+                "templatePath": "${workspaceFolder}/lambda-youtube-livetrim/template.yaml",
+                "logicalId": "YoutubeLiveTrimFunction"
+            },
+            "api": {
+                "path": "/livetrim",
+                "httpMethod": "post",
+                "payload": {
+                    "json": {
+                        "test": 123,
+                        "value": 456
+                    }
+                }
+            },
+            "sam":{
+                "containerBuild": true
+            }
+        }
+    ]
+}
