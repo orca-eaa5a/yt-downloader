@@ -1,0 +1,13 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "youtube-download-be"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm"
+s3_prefix = "youtube-download-be"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+disable_rollback = true
+parameter_overrides = "TrimmedResultBucketName=\"livetrim-result-bucket\""
+image_repositories = []

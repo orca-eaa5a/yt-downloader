@@ -48,8 +48,8 @@ Resources:
             Method: post
       Layers:
         - !Ref LiveTrimLayer
-        # - !Sub "arn:aws:lambda:us-east-1:392039937679:layer:FFmpegLayer:2"
-        - !Ref FFmpegLayer
+        - !Sub "arn:aws:lambda:us-east-1:392039937679:layer:FFmpegLayer:2"
+        
       
       Environment:
         Variables:
