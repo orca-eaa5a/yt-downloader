@@ -1,9 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  Sample SAM Template for youtube downloader serverless backend
+Description: 'Sample SAM Template for youtube downloader serverless backend
 
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+  '
 Globals:
   Function:
     Timeout: 3
@@ -16,89 +15,110 @@ Parameters:
 
 Resources:
   GetYoutubeVideoInfoFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/search/
+      CodeUri: functions/search
       Handler: app.lambda_handler
       Runtime: python3.9
       Architectures:
-        - x86_64
+      - x86_64
       Events:
         SearchYoutubeVideoRequest:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Type: Api
           Properties:
             Path: /search
             Method: get
       Layers:
         - !Ref SearchLayer
 
+    Metadata:
+      SamResourceId: GetYoutubeVideoInfoFunction
+  
   LiveTrimYoutubeVideoFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/livetrim/
+      CodeUri: functions/livetrim
       Handler: app.lambda_handler
       Runtime: python3.9
       Architectures:
-        - x86_64
+      - x86_64
       Events:
         LiveTrimRequest:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Type: Api
           Properties:
             Path: /livetrim
             Method: post
+
       Layers:
-        - !Ref LiveTrimLayer
         - !Sub "arn:aws:lambda:us-east-1:392039937679:layer:FFmpegLayer:2"
-        
+        - !Sub "arn:aws:lambda:us-east-1:392039937679:layer:Mp4ParserLayer:10"
       
       Environment:
         Variables:
-          TrimmedResultBucket: !Ref TrimmedResultBucketName
-
+          TrimmedResultBucket:
+            !Ref TrimmedResultBucketName
+          
       Policies:
-        - S3CrudPolicy:
-            BucketName: !Ref TrimmedResultBucketName
+      - S3CrudPolicy:
+          BucketName:
+            !Ref TrimmedResultBucketName
+
+    Metadata:
+      SamResourceId: LiveTrimYoutubeVideoFunction
 
   SearchLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      ContentUri: layer/search-layer/
+      ContentUri: layer/search-layer
       CompatibleRuntimes:
-        - python3.9
+      - python3.9
     Metadata:
       BuildMethod: python3.9
-
-  LiveTrimLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      ContentUri: layer/livetrim-layer/
-      CompatibleRuntimes:
-        - python3.9
-    Metadata:
-      BuildMethod: python3.9
+      SamResourceId: SearchLayer
 
   FFmpegLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       CompatibleRuntimes:
-        - python3.9
+      - python3.9
       ContentUri:
         Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
         Key: ffmpeg.zip
       RetentionPolicy: Retain
       LicenseInfo: GPL-2.0-or-later
-
+    Metadata:
+      SamResourceId: FFmpegLayer
+  
+  Mp4ParserLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+      - python3.9
+      ContentUri:
+        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
+        Key: mp4parse-0.1a0.zip
+      RetentionPolicy: Retain
+    Metadata:
+      SamResourceId: Mp4ParserLayer
+  
   TrimResultBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Ref TrimmedResultBucketName
+      BucketName:
+        !Ref TrimmedResultBucketName
+    Metadata:
+      SamResourceId: TrimResultBucket
 
 Outputs:
   LiveTrimYoutubeVideoFunction:
-    Description: "Youtube Live Trim Function"
-    Value: !GetAtt LiveTrimYoutubeVideoFunction.Arn
-  
+    Description: Youtube Live Trim Function
+    Value:
+      Fn::GetAtt:
+      - LiveTrimYoutubeVideoFunction
+      - Arn
   GetYoutubeVideoInfoFunction:
-    Description: "Get Youtube Video Information Function"
-    Value: !GetAtt GetYoutubeVideoInfoFunction.Arn
-
+    Description: Get Youtube Video Information Function
+    Value:
+      Fn::GetAtt:
+      - GetYoutubeVideoInfoFunction
+      - Arn

@@ -1,75 +1,19 @@
 import os
 import ssl
-import shutil
 import hashlib
-import boto3
-import math
 import json
-import pymp4
-from mp4parser import MpegTool
-import subprocess
-from lambda_util import *
+
+from awsutils.aws_util import *
+from mp4parser.utils.utils import *
+from mp4parser.utils.ffmpeg_utils import *
+from mp4parser.mp4modifier import Mp4Modifier
+from mp4parser.mp4parse import Mp4Parser
 
 SIGNED_URL_TIMEOUT = 600
 tmp_path_s3_key = 'tmp'
 result_path_s3_key = 'result'
 
 ssl._create_default_https_context = ssl._create_unverified_context
-ffmpeg_bin = '/opt/ffmpeg'
-
-def get_body_parameters(event, *args):
-    params = {}
-    if 'body' in event:
-        body = json.loads(event['body'])
-        for arg in args:
-            if arg in body:
-                params[arg] = body[arg]
-    
-    if not params:
-        return None
-    
-    return params
-
-def live_trim(url:str, sp:str, ep:str):
-    tool = MpegTool()
-    chunk_sz = 0
-    # at first read its header
-    chunk_sz = 100 # only read first 100 byte
-    content = byterange_request(url, start_byte=0, end_byte=chunk_sz)
-    tool.parser.set_binary(content)
-    moov_sz = tool.parser.get_moov_size()
-    mp4_metadata = byterange_request(url, start_byte=0, end_byte=moov_sz)
-    tool.parser.set_binary(mp4_metadata)
-    tool.parser.parse()
-
-    sp_timestamp = float(math.floor(conver_timestr_to_timestamp(sp)))
-    ep_timestamp = conver_timestr_to_timestamp(ep) + 1.00
-
-    if sp_timestamp < 0 or ep_timestamp < 0:
-        assert False
-
-    ftyp_raw, moov_raw, mdat_raw, trim_result = tool.live_trim(url, sp_timestamp, ep_timestamp, byterange_request, sync=True)
-    _raw = b'' + ftyp_raw + moov_raw + mdat_raw
-    return _raw, trim_result
-
-def sync_trimmed_video(media_file, trim_result):
-    sync_delta = trim_result['video_track']['res_start_time'] - trim_result['sound_track']['res_start_time']
-    #ffmpeg_sync_cmd = "ffmpeg -i {video_file} -itsoffset {ts} -i {audio_file} -map 0:v -map 1:a -acodec copy -vcodec copy {out_file}"
-    ffmpeg_sync_cmd = "{ffmpeg} -y -i {video_file} -itsoffset {ts} -i {audio_file} -map 0:v -map 1:a {codec1} copy {codec2} copy {out_file}"
-    codec1 = '-vcodec'
-    codec2 = '-acodec'
-    if sync_delta >= 0:
-        codec1 = '-acodec'
-        codec2 = '-vcodec'
-    n, ext = os.path.splitext(media_file)
-    out_file = n + "_sync" + ext
-    cmd = ffmpeg_sync_cmd.format(ffmpeg=ffmpeg_bin, video_file=media_file, ts=sync_delta, audio_file=media_file, out_file=out_file, codec1=codec1, codec2=codec2)
-    child = subprocess.Popen(cmd.split(" "), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (stdout, stderr) = child.communicate()
-    if not os.path.exists(out_file):
-        return None
-
-    return out_file
 
 def lambda_handler(event, context):
     """Sample pure Lambda function
@@ -97,8 +41,16 @@ def lambda_handler(event, context):
         })
         return resp
         
+    parser = Mp4Parser()
+    parser.stream_parse(params['url'])
+    parser.make_samples_info()
+
+    modifier = Mp4Modifier(parser)
+    sp = conver_timestr_to_timestamp(params['sp'])
+    ep = conver_timestr_to_timestamp(params['ep'])
+    duration = ep - sp
     try:
-        raw, trim_result = live_trim(params['url'], params['sp'], params['ep'])
+        mp4_header, mdat, trim_result = modifier.livetrim(params['url'], sp, ep + 1.0, True)
     except Exception as e:
         resp['body'] = json.dumps({
             "success": False,
@@ -106,6 +58,10 @@ def lambda_handler(event, context):
         })
         return resp
     
+    raw = mp4_header + mdat
+    del mp4_header
+    del mdat
+
     s3_client = create_s3_client_object()
     bucket_name = get_dest_bucket()
     """
@@ -136,21 +92,33 @@ def lambda_handler(event, context):
     else:
         tmp_file_path = write_at_lambda_storage(tmp_file_name, raw)
     del raw
-    out_file = sync_trimmed_video(tmp_file_path, trim_result)
+    out_file, m_sp = ffmpeg_sync(tmp_file_path, trim_result)
     
     if not out_file:
         resp['statusCode'] = 500
         resp['body'] = json.dumps({
             "success": False,
-            "err": "fail to process trimming, internal sever error"
+            "err": "fail to process sync, internal sever error"
         })
         return resp
     
     if not s3_uploaded:
         os.remove(tmp_file_path)
+    
     """
-    upload synced file 
+    cutoff_extra_frames about synced file 
     """
+    s_sp = sp - m_sp
+    tmp_file_path = out_file
+    out_file = ffmpeg_cutoff_extra_times(tmp_file_path, s_sp, duration)
+    if not out_file:
+        resp['statusCode'] = 500
+        resp['body'] = json.dumps({
+            "success": False,
+            "err": "fail to process cutoff extra frame"
+        })
+    os.remove(tmp_file_path)
+
     result_s3_key = "{}/{}".format(result_path_s3_key, os.path.basename(out_file))
     signed_url = s3_upload_file_wrapper(
                     s3_client=s3_client,
@@ -166,5 +134,5 @@ def lambda_handler(event, context):
             "url": signed_url
         }
     })
-    
+
     return resp
