@@ -50,7 +50,7 @@ Resources:
             Method: post
 
       Layers:
-        - !Sub "arn:aws:lambda:us-east-1:392039937679:layer:FFmpegLayer:2"
+        - !Sub "arn:aws:lambda:us-east-1:392039937679:layer:FFmpegLayer:4"
         - !Sub "arn:aws:lambda:us-east-1:392039937679:layer:Mp4ParserLayer:10"
       
       Environment:
@@ -75,31 +75,6 @@ Resources:
     Metadata:
       BuildMethod: python3.9
       SamResourceId: SearchLayer
-
-  FFmpegLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      CompatibleRuntimes:
-      - python3.9
-      ContentUri:
-        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
-        Key: ffmpeg.zip
-      RetentionPolicy: Retain
-      LicenseInfo: GPL-2.0-or-later
-    Metadata:
-      SamResourceId: FFmpegLayer
-  
-  Mp4ParserLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      CompatibleRuntimes:
-      - python3.9
-      ContentUri:
-        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
-        Key: mp4parse-0.1a0.zip
-      RetentionPolicy: Retain
-    Metadata:
-      SamResourceId: Mp4ParserLayer
   
   TrimResultBucket:
     Type: AWS::S3::Bucket
