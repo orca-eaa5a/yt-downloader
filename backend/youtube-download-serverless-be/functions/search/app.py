@@ -62,9 +62,9 @@ def lambda_handler(event, context):
     q = get_querystring_param(event, 'q')
     if not q:
         resp['statusCode'] = 200
-        resp['body'] = json.dumps({
+        resp['body'] = json.dumps(
             {'success': False, 'msg': 'empty query request'}
-        })
+        )
         return resp
     try:
         url = q

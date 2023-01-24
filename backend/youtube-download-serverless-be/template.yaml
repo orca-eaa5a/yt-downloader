@@ -5,15 +5,147 @@ Description: 'Sample SAM Template for youtube downloader serverless backend
   '
 Globals:
   Function:
-    Timeout: 3
+    Timeout: 30
     MemorySize: 128
 
 Parameters:
   TrimmedResultBucketName:
     Type: String
-    Default: livetrim-result-bucket
+    Default: trim-result-bucket
+  TrimCacheDynTableName:
+    Type: String
+    Default: trim-result-lookup-table
+  TrimCacheDynTablePartitionKey:
+    Type: String
+    Default: VideoId
+  TrimCacheDynTableSortKey:
+    Type: String
+    Default: Track
 
 Resources:
+  
+  TrimResultBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        !Ref TrimmedResultBucketName
+    Metadata:
+      SamResourceId: TrimResultBucket
+  
+  TrimResultLookupTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TrimCacheDynTableName
+      AttributeDefinitions:
+        - AttributeName: !Ref TrimCacheDynTablePartitionKey
+          AttributeType: S
+        - AttributeName: !Ref TrimCacheDynTableSortKey
+          AttributeType: S
+        # - AttributeName: BucketName
+        #   AttributeType: S
+        # - AttributeName: S3Key
+        #   AttributeType: S
+
+      KeySchema:
+        - AttributeName: !Ref TrimCacheDynTablePartitionKey
+          KeyType: HASH
+        - AttributeName: !Ref TrimCacheDynTableSortKey
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+  
+  TrimLookupFunctionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TrimLookupFunctionExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: TrimLookupFunctionExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: TrimResultLookupTableReadOnlyPolicy
+                Effect: Allow
+                Resource: !GetAtt TrimResultLookupTable.Arn
+                Action:
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+          
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  
+  LiveTrimFunctionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: LiveTrimFunctionExecutionRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: LiveTrimFunctionExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: TrimmedResultBucketReadWrite
+                Effect: Allow
+                Resource:
+                  - !GetAtt TrimResultBucket.Arn
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                
+              - Sid: TrimResultLookupTableReadWriteItemPolicy
+                Effect: Allow
+                Resource: !GetAtt TrimResultLookupTable.Arn
+                Action:
+                  - "dynamodb:GetItem"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  
+  PreSignedURLGenerateFunctionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: PreSignedURLGenerateFunctionExecutionRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaTrimmedResultBucketReadOnlyPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: LambdaTrimmedResultBucketReadOnly
+                Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                Resource:
+                  - !GetAtt TrimResultBucket.Arn
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaDynamoDBExecutionRole"
   GetYoutubeVideoInfoFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -22,12 +154,6 @@ Resources:
       Runtime: python3.9
       Architectures:
       - x86_64
-      Events:
-        SearchYoutubeVideoRequest:
-          Type: Api
-          Properties:
-            Path: /search
-            Method: get
       Layers:
         - !Ref SearchLayer
 
@@ -42,12 +168,7 @@ Resources:
       Runtime: python3.9
       Architectures:
       - x86_64
-      Events:
-        LiveTrimRequest:
-          Type: Api
-          Properties:
-            Path: /livetrim
-            Method: post
+      Role: !GetAtt LiveTrimFunctionExecutionRole.Arn
 
       Layers:
         - !Ref FFmpegLayer
@@ -57,6 +178,12 @@ Resources:
         Variables:
           TrimmedResultBucket:
             !Ref TrimmedResultBucketName
+          TrimCacheDynDB:
+            !Ref TrimCacheDynTableName
+          TrimCacheDynTablePartitionKey:
+            !Ref TrimCacheDynTablePartitionKey
+          TrimCacheDynTableSortKey:
+            !Ref TrimCacheDynTableSortKey
           
       Policies:
       - S3CrudPolicy:
@@ -65,7 +192,44 @@ Resources:
 
     Metadata:
       SamResourceId: LiveTrimYoutubeVideoFunction
+  
+  PreSignedURLGenerateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/p-signed-generator
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt PreSignedURLGenerateFunctionExecutionRole.Arn
+      Environment:
+        Variables:
+          TrimmedResultBucket:
+            !Ref TrimmedResultBucketName
 
+      Policies:
+        - S3CrudPolicy:
+            BucketName:
+              !Ref TrimmedResultBucketName
+
+  TrimResultLookupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/trim-result-lookup
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt TrimLookupFunctionExecutionRole.Arn
+      Environment:
+        Variables:
+          TrimCacheDynDB:
+            !Ref TrimCacheDynTableName
+          TrimCacheDynTablePartitionKey:
+            !Ref TrimCacheDynTablePartitionKey
+          TrimCacheDynTableSortKey:
+            !Ref TrimCacheDynTableSortKey
+      
   SearchLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -96,18 +260,10 @@ Resources:
       - python3.9
       ContentUri:
         Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
-        Key: mp4parse-0.1a0.zip
+        Key: mp4parser-1.0a.zip
       RetentionPolicy: Retain
     Metadata:
       SamResourceId: Mp4ParserLayer
-  
-  TrimResultBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName:
-        !Ref TrimmedResultBucketName
-    Metadata:
-      SamResourceId: TrimResultBucket
 
 Outputs:
   LiveTrimYoutubeVideoFunction:

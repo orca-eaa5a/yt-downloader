@@ -7,7 +7,7 @@ s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm"
 s3_prefix = "youtube-download-be"
 region = "us-east-1"
 confirm_changeset = true
-capabilities = "CAPABILITY_IAM"
+capabilities = "CAPABILITY_NAMED_IAM"
 disable_rollback = true
-parameter_overrides = "TrimmedResultBucketName=\"livetrim-result-bucket\""
+parameter_overrides = "TrimmedResultBucketName=\"livetrim-result-bucket\" TrimCacheDynTableName=\"trim-result-lookup-table\" TrimCacheDynTablePartitionKey=\"VideoId\" TrimCacheDynTableSortKey=\"Track\""
 image_repositories = []

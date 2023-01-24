@@ -1,7 +1,9 @@
 import os
+import re
 import ssl
-import hashlib
 import json
+import hashlib
+import logging
 
 from awsutils.aws_util import *
 from mp4parser.utils.utils import *
@@ -33,12 +35,13 @@ def lambda_handler(event, context):
         "statusCode": 400,
         "body": {}
     }
-    params = get_body_parameters(event, 'url', 'sp', 'ep')
+    params = get_body_parameters(event, 'o_url', 'url', 'sp', 'ep')
     if not params:
-        resp['body'] = json.dumps({
+        resp['body'] = {
             "success": False,
             "err": "invalid parameter"
-        })
+        }
+        logging.error("invalid parameter")
         return resp
         
     parser = Mp4Parser()
@@ -52,17 +55,18 @@ def lambda_handler(event, context):
     try:
         mp4_header, mdat, trim_result = modifier.livetrim(params['url'], sp, ep + 1.0, True)
     except Exception as e:
-        resp['body'] = json.dumps({
+        resp['body'] = {
             "success": False,
             "err": "fail to process trimming, invalid request"
-        })
+        }
+        logging.error("fail to process trimming.. with {}".format(str(e)))
         return resp
     
     raw = mp4_header + mdat
     del mp4_header
     del mdat
 
-    s3_client = create_s3_client_object()
+    s3_client = get_s3_client()
     bucket_name = get_dest_bucket()
     """
     check raw size over 400mb
@@ -77,10 +81,11 @@ def lambda_handler(event, context):
             s3_put_object_wrapper(s3_client, bucket_name, s3_key, raw)
         except Exception as e:
             resp['statusCode'] = 500
-            resp['body'] = json.dumps({
+            resp['body'] = {
                 "success": False,
-                "err": "fail to process trimming, invalid request"
-            })
+                "err": "fail to put object at {}".format(bucket_name)
+            }
+            logging.error("fail to put object at {}/{} with {}".format(bucket_name, s3_key, str(e)))
             return resp
         
         s3_signed_url = get_s3_presigned_url(
@@ -89,17 +94,19 @@ def lambda_handler(event, context):
             s3_key=s3_key)
         tmp_file_path = s3_signed_url
         s3_uploaded = True
+        logging.info("file is uploaded at {}/{}".format(bucket_name, tmp_file_path))
     else:
         tmp_file_path = write_at_lambda_storage(tmp_file_name, raw)
+    
     del raw
     out_file, m_sp = ffmpeg_sync(tmp_file_path, trim_result)
     
     if not out_file:
         resp['statusCode'] = 500
-        resp['body'] = json.dumps({
+        resp['body'] = {
             "success": False,
             "err": "fail to process sync, internal sever error"
-        })
+        }
         return resp
     
     if not s3_uploaded:
@@ -113,26 +120,43 @@ def lambda_handler(event, context):
     out_file = ffmpeg_cutoff_extra_times(tmp_file_path, s_sp, duration)
     if not out_file:
         resp['statusCode'] = 500
-        resp['body'] = json.dumps({
+        resp['body'] = {
             "success": False,
             "err": "fail to process cutoff extra frame"
-        })
+        }
+        logging.error("fail to process cutoff extra frame")
     os.remove(tmp_file_path)
 
     result_s3_key = "{}/{}".format(result_path_s3_key, os.path.basename(out_file))
-    signed_url = s3_upload_file_wrapper(
+    region, bucket_name, s3_key = s3_upload_file_wrapper(
                     s3_client=s3_client,
                     bucket=bucket_name,
                     source=out_file,
                     s3_key=result_s3_key
                 )
+    logging.info("trimmed result is uploaded at {}/{}".format(bucket_name, result_s3_key))
+    
+    regex = re.compile(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*")
+    video_id = regex.search(params['o_url']).group(1)
+    dyn_client = get_dynamodb_client()
+    resp = dyn_put_item(
+        dyn_client,
+        key=video_id,
+        sort_key="{}-{}".format(ep,sp),
+        bucket_name=bucket_name,
+        s3_key=result_s3_key
+    )
+    if resp:
+        logging.info("trim result lookup is saved at DynamoDB")
 
     resp['statusCode'] = 200
-    resp['body'] = json.dumps({
+    resp['body'] = {
         "success": True,
         "data": {
-            "url": signed_url
+            "bucket_region": region,
+            "bucket": bucket_name,
+            "s3_key": s3_key
         }
-    })
+    }
 
     return resp

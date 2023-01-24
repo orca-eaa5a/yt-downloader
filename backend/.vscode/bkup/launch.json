@@ -1,0 +1,31 @@
+{
+    "configurations": [
+        {
+            "type": "aws-sam",
+            "request": "direct-invoke",
+            "name": "API youtube-download-serverless-be:LiveTrimYoutubeVideoFunction",
+            "invokeTarget": {
+                "target": "api",
+                "templatePath": "${workspaceFolder}/youtube-download-serverless-be/template-debug.yaml",
+                "logicalId": "LiveTrimYoutubeVideoFunction"
+            },
+            "api": {
+                "path": "/livetrim",
+                "httpMethod": "post",
+                "payload": {
+                    "json": {
+                        "url": "https://rr2---sn-n3cgv5qc5oq-bh26d.googlevideo.com/videoplayback?expire=1674481385&ei=iTrOY-PkIqXls8IPh9K6wAU&ip=211.215.4.208&id=o-AMt1WhJ-iiItXTwaZ-j9GZDPj-dHIOLPiEvQmyzc6NHT&itag=22&source=youtube&requiressl=yes&mh=bs&mm=31%2C26&mn=sn-n3cgv5qc5oq-bh26d%2Csn-oguesndl&ms=au%2Conr&mv=m&mvi=2&pl=17&gcr=kr&initcwndbps=2343750&vprv=1&mime=video%2Fmp4&cnr=14&ratebypass=yes&dur=1440.983&lmt=1633373905635161&mt=1674459408&fvip=4&fexp=24007246&c=ANDROID&txp=5416222&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cgcr%2Cvprv%2Cmime%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=AOq0QJ8wRQIhAOXXsP9gjOcT0DdyV1QtmnVxw7f9eSR2A366ZjuPvnCxAiBBPXSj4tqMK_XYKiAdDepvvy8cXAyVHDt5-CSGRLvthQ%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgGqsM6kG6e5ndItX7ELbXZlGfCDFr-axm4pv8SFMlfQwCIQDfybAyDezO4z5hAgG-9wqvRiGXbLPpN5gDFrXuUoXKNA%3D%3D",
+                        "sp": "00:15:12.000",
+                        "ep": "00:20:40.000"
+                    }
+                }
+            },
+            "sam": {
+                "containerBuild": true
+            },
+            "aws": {
+                "region": "us-east-1"
+            }
+        }
+    ]
+}
