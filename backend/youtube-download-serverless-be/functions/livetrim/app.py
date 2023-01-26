@@ -142,7 +142,7 @@ def lambda_handler(event, context):
     resp = dyn_put_item(
         dyn_client,
         key=video_id,
-        sort_key="{}-{}".format(ep,sp),
+        sort_key="{}-{}".format(int(sp),int(ep)),
         bucket_name=bucket_name,
         s3_key=result_s3_key
     )
@@ -160,3 +160,20 @@ def lambda_handler(event, context):
     }
 
     return resp
+
+
+if __name__ == '__main__':
+    lambda_handler(
+        event={
+  "statusCode": 200,
+  "body": {
+    "exist": False,
+    "data": {
+      "o_url": "https://www.youtube.com/watch?v=H4bhRn2c8Cc",
+      "url": "https://rr5---sn-p5qlsn7s.googlevideo.com/videoplayback?expire=1674747054&ei=TkjSY_SjL8vr8wSul4Iw&ip=18.215.62.225&id=o-AH8Mjf9Fa6gI6Nfm-tRANhZSoUTWwluOfMtFxbNNga-N&itag=22&source=youtube&requiressl=yes&mh=bs&mm=31%2C26&mn=sn-p5qlsn7s%2Csn-vgqsknz7&ms=au%2Conr&mv=m&mvi=5&pl=23&pcm2=yes&gcr=us&initcwndbps=691250&vprv=1&mime=video%2Fmp4&cnr=14&ratebypass=yes&dur=1440.983&lmt=1633373905635161&mt=1674725113&fvip=2&fexp=24007246&c=ANDROID&txp=5416222&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cpcm2%2Cgcr%2Cvprv%2Cmime%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=AOq0QJ8wRQIgUEK8-farK6OwHBHgwew1QZ9HYt-GyADQCpTqEA4WFRACIQDFsSog3JQR3Uu1QmdN_xGYZj8iXqDM1NRhzKgFZKxlkg%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgQKZfyRLIH8v8iwcwhwBzAIZlNojkjxEy3J36SRy6sxcCIGq5hgPckjrrmI2kArZEB5vx9E6Vl20EYBLwtZosLQyJ",
+      "sp": "00:15:12",
+      "ep": "00:20:40"
+    }
+  }
+}, context=None
+    )

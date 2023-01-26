@@ -30,8 +30,10 @@ def lambda_handler(event, context):
             'data': None
         }
     }
-
-    body = json.loads(event['body'])
+    
+    body = event['body']
+    if type(body) == str:
+        body = json.loads(body)
 
     try:
         data = body['data']

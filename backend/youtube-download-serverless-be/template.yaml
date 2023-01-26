@@ -78,6 +78,13 @@ Resources:
                   - "dynamodb:GetItem"
                   - "dynamodb:Query"
                   - "dynamodb:Scan"
+              - Sid: LambdaInvokeFunction
+                Effect: Allow
+                Resource: 
+                  - !GetAtt LiveTrimYoutubeVideoFunction.Arn
+                  - !GetAtt PreSignedURLGenerateFunction.Arn
+                Action:
+                  - "lambda:InvokeFunction"
           
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -103,10 +110,13 @@ Resources:
               - Sid: TrimmedResultBucketReadWrite
                 Effect: Allow
                 Resource:
-                  - !GetAtt TrimResultBucket.Arn
+                  - !GetAtt 'TrimResultBucket.Arn'
+                  - !Sub '${TrimResultBucket.Arn}/*'
                 Action:
                   - "s3:GetObject"
                   - "s3:PutObject"
+                  - "s3:PutObjectAcl"
+                  - "s3:GetObjectAcl"
                 
               - Sid: TrimResultLookupTableReadWriteItemPolicy
                 Effect: Allow
@@ -116,6 +126,12 @@ Resources:
                   - "dynamodb:PutItem"
                   - "dynamodb:Query"
                   - "dynamodb:Scan"
+
+              - Sid: LambdaInvokeFunction
+                Effect: Allow
+                Resource: !GetAtt PreSignedURLGenerateFunction.Arn
+                Action:
+                  - "lambda:InvokeFunction"
 
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -144,8 +160,47 @@ Resources:
                   - "s3:GetObject"
                 Resource:
                   - !GetAtt TrimResultBucket.Arn
+                  - !Sub '${TrimResultBucket.Arn}/*'
+
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaDynamoDBExecutionRole"
+
+  YoutueVideoTrimStepFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: YoutueVideoTrimStepFunctionRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - states.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: YoutueVideoTrimStepFunctionLambdaExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: StepFunctionLambdaExecution
+                Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource:
+                  - !GetAtt GetYoutubeVideoInfoFunction.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunction.Arn
+                  - !GetAtt PreSignedURLGenerateFunction.Arn
+                  - !GetAtt TrimResultLookupFunction.Arn
+              - Sid: XRayAccessPolicy
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                  - xray:GetSamplingRules
+                  - xray:GetSamplingTargets
+                Resource: "*"
+
   GetYoutubeVideoInfoFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -169,7 +224,7 @@ Resources:
       Architectures:
       - x86_64
       Role: !GetAtt LiveTrimFunctionExecutionRole.Arn
-
+      MemorySize: 256
       Layers:
         - !Ref FFmpegLayer
         - !Ref Mp4ParserLayer
@@ -229,6 +284,74 @@ Resources:
             !Ref TrimCacheDynTablePartitionKey
           TrimCacheDynTableSortKey:
             !Ref TrimCacheDynTableSortKey
+
+  YoutubeVideoTrimStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      Definition:
+        Comment: "Youtube Video Live Streaming Trimming Stepfunction Workflow"
+        StartAt: TrimResultLookup
+        States:
+          TrimResultLookup:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt TrimResultLookupFunction.Arn
+            Retry:
+              - ErrorEquals:
+                  - "Lambda.ServiceException"
+                  - "Lambda.AWSLambdaException"
+                IntervalSeconds: 2
+                MaxAttempts: 2
+                BackoffRate: 2
+            Next:
+              LookupBranch
+
+          LookupBranch:
+            Type: Choice
+            Choices:
+              - Variable: "$.body.exist"
+                BooleanEquals: true
+                Next: PreSignedURLGenerate
+              - Variable: "$.body.exist"
+                BooleanEquals: false
+                Next: LiveTrim
+
+          LiveTrim:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt LiveTrimYoutubeVideoFunction.Arn
+            Retry:
+              - ErrorEquals:
+                  - "Lambda.ServiceException"
+                  - "Lambda.AWSLambdaException"
+                IntervalSeconds: 2
+                MaxAttempts: 2
+                BackoffRate: 2
+            Next: PreSignedURLGenerate
+
+          PreSignedURLGenerate:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt PreSignedURLGenerateFunction.Arn
+            Retry:
+              - ErrorEquals:
+                  - "Lambda.ServiceException"
+                  - "Lambda.AWSLambdaException"
+                IntervalSeconds: 2
+                MaxAttempts: 2
+                BackoffRate: 2
+            End:
+              true
+      RoleArn: !GetAtt YoutueVideoTrimStepFunctionRole.Arn
       
   SearchLayer:
     Type: AWS::Serverless::LayerVersion
@@ -266,15 +389,9 @@ Resources:
       SamResourceId: Mp4ParserLayer
 
 Outputs:
-  LiveTrimYoutubeVideoFunction:
+  YoutubeVideoTrimStateMachineArn:
     Description: Youtube Live Trim Function
     Value:
       Fn::GetAtt:
-      - LiveTrimYoutubeVideoFunction
-      - Arn
-  GetYoutubeVideoInfoFunction:
-    Description: Get Youtube Video Information Function
-    Value:
-      Fn::GetAtt:
-      - GetYoutubeVideoInfoFunction
+      - YoutubeVideoTrimStateMachine
       - Arn

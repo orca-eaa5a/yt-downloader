@@ -24,8 +24,8 @@ def get_body_parameters(event, *args):
             else:
                 raise te
         for arg in args:
-            if arg in body:
-                params[arg] = body[arg]
+            if arg in body['data']:
+                params[arg] = body['data'][arg]
     
     if not params:
         return None

@@ -86,3 +86,12 @@ def lambda_handler(event, context):
         }
     
     return resp
+
+if __name__ == '__main__':
+    lambda_handler(event={
+        "body": {
+            "o_url": "https://www.youtube.com/watch?v=H4bhRn2c8Cc",
+            "sp": "00:15:12",
+            "ep": "00:20:40"
+        }
+    }, context=None)
