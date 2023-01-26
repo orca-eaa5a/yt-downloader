@@ -1,5 +1,6 @@
 import re
 import json
+import logging
 from pytube import YouTube
 from pytube.exceptions import RegexMatchError
 import requests
@@ -61,10 +62,11 @@ def lambda_handler(event, context):
     }
     q = get_querystring_param(event, 'q')
     if not q:
+        logging.info('no such parameter')
+
         resp['statusCode'] = 200
-        resp['body'] = json.dumps(
-            {'success': False, 'msg': 'empty query request'}
-        )
+        resp['body'] = {'success': False, 'msg': 'empty query request'}
+        
         return resp
     try:
         url = q
@@ -72,18 +74,20 @@ def lambda_handler(event, context):
             url = 'https://www.youtube.com/watch?v={}'.format(q)
         yt = YouTube(url)
     except RegexMatchError as rme:
+        logging.error('invalid youtube ID is quried')
         resp['statusCode'] = 400
-        resp['body'] = json.dumps({
+        resp['body'] = {
             'success': False,
-            'msg': 'invalid youtube id form'
-        })
+            'err': 'invalid youtube id form'
+        }
         return resp
     
     video_info = make_video_info(yt)
+    logging.info('success to get youtube video information')
     resp['statusCode'] = 200
-    resp['body'] = json.dumps({
+    resp['body'] = {
         'success': True,
         'data': video_info
-    })
+    }
 
     return resp

@@ -201,6 +201,20 @@ Resources:
                   - xray:GetSamplingTargets
                 Resource: "*"
 
+
+  GetTimestampsAboutYoutubeVideoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/get-timestamp-advanced
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Layers:
+        - !Ref SearchLayer
+    Metadata:
+      SamResourceId: GetTimestampsAboutYoutubeVideoFunction
+
   GetYoutubeVideoInfoFunction:
     Type: AWS::Serverless::Function
     Properties:
