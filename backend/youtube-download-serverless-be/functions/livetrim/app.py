@@ -11,6 +11,8 @@ from mp4parser.utils.ffmpeg_utils import *
 from mp4parser.mp4modifier import Mp4Modifier
 from mp4parser.mp4parse import Mp4Parser
 
+logging.getLogger().setLevel(logging.INFO)
+
 SIGNED_URL_TIMEOUT = 600
 tmp_path_s3_key = 'tmp'
 result_path_s3_key = 'result'

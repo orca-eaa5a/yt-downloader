@@ -5,10 +5,14 @@ from pytube import YouTube
 from pytube.exceptions import RegexMatchError
 import requests
 
+logging.getLogger().setLevel(logging.INFO)
+
 def get_querystring_param(event, param):
-    if 'queryStringParameters' in event:
-        if param in event['queryStringParameters']:
-            return event['queryStringParameters'][param]
+    # if 'queryStringParameters' in event:
+    #     if param in event['queryStringParameters']:
+    #         return event['queryStringParameters'][param]
+    if param in event:
+        return event['body'][param]
     return None
 
 def make_video_info(yt:YouTube):

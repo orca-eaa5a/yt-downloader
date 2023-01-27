@@ -302,6 +302,8 @@ Resources:
   YoutubeVideoTrimStateMachine:
     Type: AWS::StepFunctions::StateMachine
     Properties:
+      StateMachineName: YoutubeVideoTrimStateMachine
+      StateMachineType: EXPRESS
       Definition:
         Comment: "Youtube Video Live Streaming Trimming Stepfunction Workflow"
         StartAt: TrimResultLookup

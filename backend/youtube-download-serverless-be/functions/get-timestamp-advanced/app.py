@@ -3,16 +3,23 @@ import json
 import logging
 import requests
 
+logging.getLogger().setLevel(logging.INFO)
+
 YOUTUBE_API_KEY = "AIzaSyCpADRn50KXSimEQLh7-egvesN21qWwoQ8"
 
 def get_querystring_params(event, *args):
-    if 'queryStringParameters' in event:
-        params = {}
-        for arg in args:
-            if arg in event['queryStringParameters']:
-                params[arg] = event['queryStringParameters'][arg]
-        return params
-    return None
+    params = {}
+    for arg in args:
+        if arg in event:
+            params[arg] = event[arg]
+    return params
+    # if 'queryStringParameters' in event:
+    #     params = {}
+    #     for arg in args:
+    #         if arg in event['queryStringParameters']:
+    #             params[arg] = event['queryStringParameters'][arg]
+    #     return params
+    # return None
 
 def lambda_handler(event, context):
     resp = {

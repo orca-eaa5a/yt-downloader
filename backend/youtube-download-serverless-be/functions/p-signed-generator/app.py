@@ -2,6 +2,8 @@ import json
 import boto3
 import logging
 
+logging.getLogger().setLevel(logging.INFO)
+
 SIGNED_URL_TMOUT = 600
 
 def lambda_handler(event, context):

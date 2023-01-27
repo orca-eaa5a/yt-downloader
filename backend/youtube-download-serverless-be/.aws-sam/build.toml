@@ -37,6 +37,15 @@ manifest_hash = ""
 packagetype = "Zip"
 functions = ["TrimResultLookupFunction"]
 
+[function_build_definitions.7cf9e84b-e3a9-4b16-8553-36947da71a90]
+codeuri = "/Users/orca/orca_lab/webdev/youtube_downloader/backend/youtube-download-serverless-be/functions/get-timestamp-advanced"
+runtime = "python3.9"
+architecture = "x86_64"
+handler = "app.lambda_handler"
+manifest_hash = ""
+packagetype = "Zip"
+functions = ["GetTimestampsAboutYoutubeVideoFunction"]
+
 [layer_build_definitions]
 [layer_build_definitions.74603558-2a0d-487c-a017-1ebd6f9279b0]
 layer_name = "SearchLayer"

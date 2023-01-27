@@ -3,6 +3,7 @@ import json
 import logging
 from awsutils.aws_util import *
 
+logging.getLogger().setLevel(logging.INFO)
 YOUTUBE_VIDEO_PREFIX = "https://youtube.com/watch?v="
 
 def normalize_timestr(time_str):
@@ -83,6 +84,7 @@ def lambda_handler(event, context):
             "bucket": query_result['Item']['BucketName']['S'],
             "o_url": params['o_url'],
             "url": params['url'],
+            "bucket_region": REGION
         }
     
     return resp
