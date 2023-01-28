@@ -1,12 +1,32 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: 'Sample SAM Template for youtube downloader serverless backend
+Description: SAM Template for youtube downloader serverless backend'
 
-  '
+# --------------------------------------------------------------------------------- #
+# Global Variable About AWS Resources
+# - Functions
+#   : Lambda Function Default Memory Size & Timeout
+# --------------------------------------------------------------------------------- #
 Globals:
   Function:
     Timeout: 30
     MemorySize: 128
+
+
+# --------------------------------------------------------------------------------- #
+# Parmaters for template
+# - TrimmedResultBucketName
+#   : S3 Bucket Name
+#
+# - TrimCacheDynTableName
+#   : DynamoDB Table Name
+#
+# - TrimCacheDynTablePartitionKey
+#   : DynamoDB Partition Key name
+#
+# - TrimCacheDynTableSortKey
+#   : DynamoDB Sort Key name
+# --------------------------------------------------------------------------------- #
 
 Parameters:
   TrimmedResultBucketName:
@@ -22,8 +42,41 @@ Parameters:
     Type: String
     Default: Track
 
+
 Resources:
-  
+# --------------------------------------------------------------------------------- #
+# Definitions About AWS Resources which Composed Service 
+# 1. S3 Bucket
+#   - TrimResultBucket
+#
+# 2. DynamoDB
+#   - TrimResultLookupTable
+#
+# 3. Lambda Functions
+#   - GetTimestampsAboutYoutubeVideoFunction
+#
+#   - GetTimestampsAboutYoutubeVideoFunction
+#   
+#   - GetYoutubeVideoInfoFunction
+#   
+#   - LiveTrimYoutubeVideoFunction
+#   
+#   - PreSignedURLGenerateFunction
+#   
+#   - TrimResultLookupFunction
+#
+#   - ErrorReciverFunction
+#
+# 4. StepFunction
+#   - YoutubeVideoTrimStateMachine
+#
+# 5. Lambda Layers
+#   - SearchLayer
+#
+#   - FFmpegLayer
+#
+#   - Mp4Parserlayer
+# --------------------------------------------------------------------------------- #
   TrimResultBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -31,7 +84,7 @@ Resources:
         !Ref TrimmedResultBucketName
     Metadata:
       SamResourceId: TrimResultBucket
-  
+
   TrimResultLookupTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -41,10 +94,6 @@ Resources:
           AttributeType: S
         - AttributeName: !Ref TrimCacheDynTableSortKey
           AttributeType: S
-        # - AttributeName: BucketName
-        #   AttributeType: S
-        # - AttributeName: S3Key
-        #   AttributeType: S
 
       KeySchema:
         - AttributeName: !Ref TrimCacheDynTablePartitionKey
@@ -52,7 +101,438 @@ Resources:
         - AttributeName: !Ref TrimCacheDynTableSortKey
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
+
+  GetTimestampsAboutYoutubeVideoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/get-timestamp-advanced
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Layers:
+        - !Ref SearchLayer
+    Metadata:
+      SamResourceId: GetTimestampsAboutYoutubeVideoFunction
+
+  GetYoutubeVideoInfoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/search
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Layers:
+        - !Ref SearchLayer
+
+    Metadata:
+      SamResourceId: GetYoutubeVideoInfoFunction
+
+# --------------------------------------------------------------------------------- #
+# Definitions About Lambda Function : LiveTrimYoutubeVideoFunction
+# --------------------------------------------------------------------------------- #
+
+  LiveTrimYoutubeVideoFunctionSmall:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LiveTrimYoutubeVideoFunctionSmall
+      Description: "Trim Function which process light mp4 media (MemorySize: 512)"
+      CodeUri: functions/livetrim
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt LiveTrimFunctionExecutionRole.Arn
+      MemorySize: 512
+      Timeout: 600
+      Layers:
+        - !Ref FFmpegLayer
+        - !Ref Mp4ParserLayer
+      
+      Environment:
+        Variables:
+          TrimmedResultBucket:
+            !Ref TrimmedResultBucketName
+          TrimCacheDynDB:
+            !Ref TrimCacheDynTableName
+          TrimCacheDynTablePartitionKey:
+            !Ref TrimCacheDynTablePartitionKey
+          TrimCacheDynTableSortKey:
+            !Ref TrimCacheDynTableSortKey
+          
+      Policies:
+      - S3CrudPolicy:
+          BucketName:
+            !Ref TrimmedResultBucketName
+
+    Metadata:
+      SamResourceId: LiveTrimYoutubeVideoFunctionSmall
+
+  LiveTrimYoutubeVideoFunctionMedium:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LiveTrimYoutubeVideoFunctionMedium
+      Description: "Trim Function which process little heavy mp4 media (MemorySize: 1024)"
+      CodeUri: functions/livetrim
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt LiveTrimFunctionExecutionRole.Arn
+      MemorySize: 1024
+      Timeout: 600
+      Layers:
+        - !Ref FFmpegLayer
+        - !Ref Mp4ParserLayer
+      
+      Environment:
+        Variables:
+          TrimmedResultBucket:
+            !Ref TrimmedResultBucketName
+          TrimCacheDynDB:
+            !Ref TrimCacheDynTableName
+          TrimCacheDynTablePartitionKey:
+            !Ref TrimCacheDynTablePartitionKey
+          TrimCacheDynTableSortKey:
+            !Ref TrimCacheDynTableSortKey
+          
+      Policies:
+      - S3CrudPolicy:
+          BucketName:
+            !Ref TrimmedResultBucketName
+
+    Metadata:
+      SamResourceId: LiveTrimYoutubeVideoFunctionMedium
+
+  LiveTrimYoutubeVideoFunctionLarge:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LiveTrimYoutubeVideoFunctionLarge
+      Description: "Trim Function which process more heavy mp4 media (MemorySize: 2048)"
+      CodeUri: functions/livetrim
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt LiveTrimFunctionExecutionRole.Arn
+      MemorySize: 2048
+      Timeout: 600
+      Layers:
+        - !Ref FFmpegLayer
+        - !Ref Mp4ParserLayer
+      
+      Environment:
+        Variables:
+          TrimmedResultBucket:
+            !Ref TrimmedResultBucketName
+          TrimCacheDynDB:
+            !Ref TrimCacheDynTableName
+          TrimCacheDynTablePartitionKey:
+            !Ref TrimCacheDynTablePartitionKey
+          TrimCacheDynTableSortKey:
+            !Ref TrimCacheDynTableSortKey
+          
+      Policies:
+      - S3CrudPolicy:
+          BucketName:
+            !Ref TrimmedResultBucketName
+
+    Metadata:
+      SamResourceId: LiveTrimYoutubeVideoFunctionLarge
+
+  LiveTrimYoutubeVideoFunctionXLarge:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LiveTrimYoutubeVideoFunctionXLarge
+      Description: "Trim Function which process very heavy mp4 media (MemorySize: 3008)"
+      CodeUri: functions/livetrim
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt LiveTrimFunctionExecutionRole.Arn
+      MemorySize: 3008
+      Timeout: 600
+      Layers:
+        - !Ref FFmpegLayer
+        - !Ref Mp4ParserLayer
+      
+      Environment:
+        Variables:
+          TrimmedResultBucket:
+            !Ref TrimmedResultBucketName
+          TrimCacheDynDB:
+            !Ref TrimCacheDynTableName
+          TrimCacheDynTablePartitionKey:
+            !Ref TrimCacheDynTablePartitionKey
+          TrimCacheDynTableSortKey:
+            !Ref TrimCacheDynTableSortKey
+          
+      Policies:
+      - S3CrudPolicy:
+          BucketName:
+            !Ref TrimmedResultBucketName
+
+    Metadata:
+      SamResourceId: LiveTrimYoutubeVideoFunctionXLarge
+
+# --------------------------------------------------------------------------------- #
+# End
+# --------------------------------------------------------------------------------- #
+
+  PreSignedURLGenerateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/p-signed-generator
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt PreSignedURLGenerateFunctionExecutionRole.Arn
+      Environment:
+        Variables:
+          TrimmedResultBucket:
+            !Ref TrimmedResultBucketName
+
+      Policies:
+        - S3CrudPolicy:
+            BucketName:
+              !Ref TrimmedResultBucketName
+
+  TrimResultLookupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/trim-result-lookup
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt TrimLookupFunctionExecutionRole.Arn
+      Environment:
+        Variables:
+          TrimCacheDynDB:
+            !Ref TrimCacheDynTableName
+          TrimCacheDynTablePartitionKey:
+            !Ref TrimCacheDynTablePartitionKey
+          TrimCacheDynTableSortKey:
+            !Ref TrimCacheDynTableSortKey
+
+  ErrorReceiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ErrorReceiveFunction
+      CodeUri: functions/err-receiver
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+    
+    Metadata:
+      SamResourceId: ErrorReceiveFunction
+      
+
+  YoutubeVideoTrimStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: YoutubeVideoTrimStateMachine
+      StateMachineType: EXPRESS
+      Definition:
+        Comment: "Youtube Video Live Streaming Trimming Stepfunction Workflow"
+        StartAt: TrimResultLookup
+        States:
+          TrimResultLookup:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt TrimResultLookupFunction.Arn
+            Retry:
+              - ErrorEquals:
+                  - "Lambda.ServiceException"
+                  - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            Next:
+              LookupFunctionReturnCheckBrnach
+
+          LookupFunctionReturnCheckBrnach:
+            Type: Choice
+            Choices:
+              - Variable: $.statusCode
+                NumericEquals: 200
+                Next: LookupResultBranch
+            Default: ErrReciver
+          
+          LookupResultBranch:
+            Type: Choice
+            Choices:
+              - Variable: $.body.success
+                BooleanEquals: true
+                Next: PreSignedURLGenerate
+              - Variable: $.body.success
+                BooleanEquals: false
+                Next: TrimHandlingBranch
+          
+          TrimHandlingBranch:
+            Type: Choice
+            Choices:
+              - Variable: $.body.data.m_duration
+                NumericLessThan: 1800
+                Next: TrimSmall
+              - And:
+                  - Variable: $.body.data.m_duration
+                    NumericGreaterThanEquals: 1800
+                  - Variable: $.body.data.m_duration
+                    NumericLessThan: 3600
+                Next: TrimMedium
+              - And:
+                  - Variable: $.body.data.m_duration
+                    NumericGreaterThanEquals: 3600
+                  - Variable: $.body.data.m_duration
+                    NumericLessThan: 7200
+                Next: TrimLarge
+              - Variable: $.body.data.m_duration
+                NumericGreaterThanEquals: 7200
+                Next: TrimXLarge
+          
+          TrimSmall:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt LiveTrimYoutubeVideoFunctionSmall.Arn
+            Retry:
+              - ErrorEquals:
+                - "Lambda.ServiceException"
+                - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            Next: PreSignedURLGenerate
+
+          TrimMedium:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt LiveTrimYoutubeVideoFunctionMedium.Arn
+            Retry:
+              - ErrorEquals:
+                - "Lambda.ServiceException"
+                - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            Next: PreSignedURLGenerate
+
+          TrimLarge:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt LiveTrimYoutubeVideoFunctionLarge.Arn
+            Retry:
+              - ErrorEquals:
+                - "Lambda.ServiceException"
+                - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            Next: PreSignedURLGenerate
+
+          TrimXLarge:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt LiveTrimYoutubeVideoFunctionXLarge.Arn
+            Retry:
+              - ErrorEquals:
+                - "Lambda.ServiceException"
+                - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            Next: PreSignedURLGenerate
+
+          ErrReciver:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt ErrorReceiveFunction.Arn
+            Retry:
+              - ErrorEquals:
+                - "Lambda.ServiceException"
+                - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            End:
+              true
+
+          PreSignedURLGenerate:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt PreSignedURLGenerateFunction.Arn
+            Retry:
+              - ErrorEquals:
+                  - "Lambda.ServiceException"
+                  - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            End:
+              true
+      RoleArn: !GetAtt YoutubeVideoTrimStepFunctionRole.Arn
+      
+  SearchLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: layer/search-layer
+      CompatibleRuntimes:
+      - python3.9
+    Metadata:
+      BuildMethod: python3.9
+      SamResourceId: SearchLayer
+
+  FFmpegLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+      - python3.9
+      ContentUri:
+        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
+        Key: ffmpeg.zip
+      RetentionPolicy: Retain
+      LicenseInfo: GPL-2.0-or-later
+    Metadata:
+      SamResourceId: FFmpegLayer
   
+  Mp4ParserLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+      - python3.9
+      ContentUri:
+        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
+        Key: mp4parser-0.3a.zip
+      RetentionPolicy: Retain
+    Metadata:
+      SamResourceId: Mp4ParserLayer
+  
+# --------------------------------------------------------------------------------- #
+# Definitions About Roles for AWS Resources
+# 1. TrimLookupFunctionExecutionRole
+#   : TrimResultLookupFunction
+#
+# 2. LiveTrimFunctionExecutionRole
+#   : LiveTrimYoutubeVideoFunction
+#   
+# 3. PreSignedURLGenerateFunctionExecutionRole
+#   - PreSignedURLGenerateFunction
+#
+# 4. YoutubeVideoTrimStepFunctionRole
+#   - YoutubeVideoTrimStateMachine
+# --------------------------------------------------------------------------------- #
+
   TrimLookupFunctionExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -81,7 +561,10 @@ Resources:
               - Sid: LambdaInvokeFunction
                 Effect: Allow
                 Resource: 
-                  - !GetAtt LiveTrimYoutubeVideoFunction.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunctionSmall.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunctionMedium.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunctionLarge.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunctionXLarge.Arn
                   - !GetAtt PreSignedURLGenerateFunction.Arn
                 Action:
                   - "lambda:InvokeFunction"
@@ -165,10 +648,10 @@ Resources:
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaDynamoDBExecutionRole"
 
-  YoutueVideoTrimStepFunctionRole:
+  YoutubeVideoTrimStepFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: YoutueVideoTrimStepFunctionRole
+      RoleName: YoutubeVideoTrimStepFunctionRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -179,7 +662,7 @@ Resources:
             Action:
               - sts:AssumeRole
       Policies:
-        - PolicyName: YoutueVideoTrimStepFunctionLambdaExecutionPolicy
+        - PolicyName: YoutubeVideoTrimStepFunctionLambdaExecutionPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -189,9 +672,13 @@ Resources:
                   - "lambda:InvokeFunction"
                 Resource:
                   - !GetAtt GetYoutubeVideoInfoFunction.Arn
-                  - !GetAtt LiveTrimYoutubeVideoFunction.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunctionSmall.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunctionMedium.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunctionLarge.Arn
+                  - !GetAtt LiveTrimYoutubeVideoFunctionXLarge.Arn
                   - !GetAtt PreSignedURLGenerateFunction.Arn
                   - !GetAtt TrimResultLookupFunction.Arn
+                  - !GetAtt ErrorReceiveFunction.Arn
               - Sid: XRayAccessPolicy
                 Effect: Allow
                 Action:
@@ -200,209 +687,9 @@ Resources:
                   - xray:GetSamplingRules
                   - xray:GetSamplingTargets
                 Resource: "*"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/CloudWatchFullAccess"
 
-
-  GetTimestampsAboutYoutubeVideoFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: functions/get-timestamp-advanced
-      Handler: app.lambda_handler
-      Runtime: python3.9
-      Architectures:
-      - x86_64
-      Layers:
-        - !Ref SearchLayer
-    Metadata:
-      SamResourceId: GetTimestampsAboutYoutubeVideoFunction
-
-  GetYoutubeVideoInfoFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: functions/search
-      Handler: app.lambda_handler
-      Runtime: python3.9
-      Architectures:
-      - x86_64
-      Layers:
-        - !Ref SearchLayer
-
-    Metadata:
-      SamResourceId: GetYoutubeVideoInfoFunction
-  
-  LiveTrimYoutubeVideoFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: functions/livetrim
-      Handler: app.lambda_handler
-      Runtime: python3.9
-      Architectures:
-      - x86_64
-      Role: !GetAtt LiveTrimFunctionExecutionRole.Arn
-      MemorySize: 256
-      Layers:
-        - !Ref FFmpegLayer
-        - !Ref Mp4ParserLayer
-      
-      Environment:
-        Variables:
-          TrimmedResultBucket:
-            !Ref TrimmedResultBucketName
-          TrimCacheDynDB:
-            !Ref TrimCacheDynTableName
-          TrimCacheDynTablePartitionKey:
-            !Ref TrimCacheDynTablePartitionKey
-          TrimCacheDynTableSortKey:
-            !Ref TrimCacheDynTableSortKey
-          
-      Policies:
-      - S3CrudPolicy:
-          BucketName:
-            !Ref TrimmedResultBucketName
-
-    Metadata:
-      SamResourceId: LiveTrimYoutubeVideoFunction
-  
-  PreSignedURLGenerateFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: functions/p-signed-generator
-      Handler: app.lambda_handler
-      Runtime: python3.9
-      Architectures:
-      - x86_64
-      Role: !GetAtt PreSignedURLGenerateFunctionExecutionRole.Arn
-      Environment:
-        Variables:
-          TrimmedResultBucket:
-            !Ref TrimmedResultBucketName
-
-      Policies:
-        - S3CrudPolicy:
-            BucketName:
-              !Ref TrimmedResultBucketName
-
-  TrimResultLookupFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: functions/trim-result-lookup
-      Handler: app.lambda_handler
-      Runtime: python3.9
-      Architectures:
-      - x86_64
-      Role: !GetAtt TrimLookupFunctionExecutionRole.Arn
-      Environment:
-        Variables:
-          TrimCacheDynDB:
-            !Ref TrimCacheDynTableName
-          TrimCacheDynTablePartitionKey:
-            !Ref TrimCacheDynTablePartitionKey
-          TrimCacheDynTableSortKey:
-            !Ref TrimCacheDynTableSortKey
-
-  YoutubeVideoTrimStateMachine:
-    Type: AWS::StepFunctions::StateMachine
-    Properties:
-      StateMachineName: YoutubeVideoTrimStateMachine
-      StateMachineType: EXPRESS
-      Definition:
-        Comment: "Youtube Video Live Streaming Trimming Stepfunction Workflow"
-        StartAt: TrimResultLookup
-        States:
-          TrimResultLookup:
-            Type: Task
-            Resource: arn:aws:states:::lambda:invoke
-            OutputPath: $.Payload
-            Parameters:
-              Payload.$: $
-              FunctionName: !GetAtt TrimResultLookupFunction.Arn
-            Retry:
-              - ErrorEquals:
-                  - "Lambda.ServiceException"
-                  - "Lambda.AWSLambdaException"
-                IntervalSeconds: 2
-                MaxAttempts: 2
-                BackoffRate: 2
-            Next:
-              LookupBranch
-
-          LookupBranch:
-            Type: Choice
-            Choices:
-              - Variable: "$.body.exist"
-                BooleanEquals: true
-                Next: PreSignedURLGenerate
-              - Variable: "$.body.exist"
-                BooleanEquals: false
-                Next: LiveTrim
-
-          LiveTrim:
-            Type: Task
-            Resource: arn:aws:states:::lambda:invoke
-            OutputPath: $.Payload
-            Parameters:
-              Payload.$: $
-              FunctionName: !GetAtt LiveTrimYoutubeVideoFunction.Arn
-            Retry:
-              - ErrorEquals:
-                  - "Lambda.ServiceException"
-                  - "Lambda.AWSLambdaException"
-                IntervalSeconds: 2
-                MaxAttempts: 2
-                BackoffRate: 2
-            Next: PreSignedURLGenerate
-
-          PreSignedURLGenerate:
-            Type: Task
-            Resource: arn:aws:states:::lambda:invoke
-            OutputPath: $.Payload
-            Parameters:
-              Payload.$: $
-              FunctionName: !GetAtt PreSignedURLGenerateFunction.Arn
-            Retry:
-              - ErrorEquals:
-                  - "Lambda.ServiceException"
-                  - "Lambda.AWSLambdaException"
-                IntervalSeconds: 2
-                MaxAttempts: 2
-                BackoffRate: 2
-            End:
-              true
-      RoleArn: !GetAtt YoutueVideoTrimStepFunctionRole.Arn
-      
-  SearchLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      ContentUri: layer/search-layer
-      CompatibleRuntimes:
-      - python3.9
-    Metadata:
-      BuildMethod: python3.9
-      SamResourceId: SearchLayer
-
-  FFmpegLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      CompatibleRuntimes:
-      - python3.9
-      ContentUri:
-        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
-        Key: ffmpeg.zip
-      RetentionPolicy: Retain
-      LicenseInfo: GPL-2.0-or-later
-    Metadata:
-      SamResourceId: FFmpegLayer
-  
-  Mp4ParserLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      CompatibleRuntimes:
-      - python3.9
-      ContentUri:
-        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
-        Key: mp4parser-1.0a.zip
-      RetentionPolicy: Retain
-    Metadata:
-      SamResourceId: Mp4ParserLayer
 
 Outputs:
   YoutubeVideoTrimStateMachineArn:

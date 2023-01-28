@@ -36,6 +36,9 @@ def lambda_handler(event, context):
     body = event['body']
     if type(body) == str:
         body = json.loads(body)
+    
+    if 'err' in body:
+        return event
 
     try:
         data = body['data']

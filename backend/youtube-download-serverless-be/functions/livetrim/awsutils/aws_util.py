@@ -26,11 +26,12 @@ def get_body_parameters(event, *args):
         for arg in args:
             if arg in body['data']:
                 params[arg] = body['data'][arg]
-    
+            else:
+                return None, "required parameter is not existed"
     if not params:
-        return None
+        return None, "empty parameter"
     
-    return params
+    return params, "success"
 
 def get_directory_usage(dir_name):
     size = 0

@@ -1,4 +1,5 @@
 import os
+import gc
 import re
 import ssl
 import json
@@ -34,20 +35,25 @@ def lambda_handler(event, context):
     API Gateway Lambda Proxy Output Format: dict
     """
     resp = {
-        "statusCode": 400,
-        "body": {}
-    }
-    params = get_body_parameters(event, 'o_url', 'url', 'sp', 'ep')
-    if not params:
-        resp['body'] = {
-            "success": False,
-            "err": "invalid parameter"
+        'statusCode': 400,
+        'body': {
+            'success': False
         }
-        logging.error("invalid parameter")
+    }
+    params, msg = get_body_parameters(event, 'o_url', 'url', 'sp', 'ep')
+    if not params:
+        resp['body']['err'] = msg
+        logging.error(resp['body']['err'])
         return resp
         
     parser = Mp4Parser()
-    parser.stream_parse(params['url'])
+    try:
+        parser.stream_parse(params['url'])
+    except Exception as e:
+        resp['body']['err'] = str(e)
+        logging.error("stream_parse.. {}".format(e))
+        return resp
+
     parser.make_samples_info()
 
     modifier = Mp4Modifier(parser)
@@ -57,16 +63,19 @@ def lambda_handler(event, context):
     try:
         mp4_header, mdat, trim_result = modifier.livetrim(params['url'], sp, ep + 1.0, True)
     except Exception as e:
-        resp['body'] = {
-            "success": False,
-            "err": "fail to process trimming, invalid request"
-        }
-        logging.error("fail to process trimming.. with {}".format(str(e)))
+        resp['body']['err'] = "fail to process trimming with error: {}".format(str(e))
+        logging.error(resp['body']['err'])
         return resp
     
     raw = mp4_header + mdat
+    
     del mp4_header
     del mdat
+    del modifier
+    del parser
+
+    gc.collect()
+    logging.info('process garbage collecting')
 
     s3_client = get_s3_client()
     bucket_name = get_dest_bucket()
@@ -101,14 +110,18 @@ def lambda_handler(event, context):
         tmp_file_path = write_at_lambda_storage(tmp_file_name, raw)
     
     del raw
-    out_file, m_sp = ffmpeg_sync(tmp_file_path, trim_result)
-    
-    if not out_file:
+    try:
+        out_file, m_sp = ffmpeg_sync(tmp_file_path, trim_result)
+        if not out_file:
+            resp['statusCode'] = 500
+            resp['body']['err'] = "fail to process sync, internal sever error"
+
+            return resp
+
+    except Exception as e:
         resp['statusCode'] = 500
-        resp['body'] = {
-            "success": False,
-            "err": "fail to process sync, internal sever error"
-        }
+        resp['body']['err'] = "fail to process sync with error: {}".format(str(e))
+
         return resp
     
     if not s3_uploaded:
@@ -119,16 +132,23 @@ def lambda_handler(event, context):
     """
     s_sp = sp - m_sp
     tmp_file_path = out_file
-    out_file = ffmpeg_cutoff_extra_times(tmp_file_path, s_sp, duration)
-    if not out_file:
-        resp['statusCode'] = 500
-        resp['body'] = {
-            "success": False,
-            "err": "fail to process cutoff extra frame"
-        }
-        logging.error("fail to process cutoff extra frame")
-    os.remove(tmp_file_path)
+    try:
+        out_file = ffmpeg_cutoff_extra_times(tmp_file_path, s_sp, duration)
+        if not out_file:
+            resp['statusCode'] = 500
+            resp['body']['err'] = "fail to process cutoff extra frame"
+            logging.error(resp['body']['err'])
 
+            return resp
+
+        os.remove(tmp_file_path)
+
+    except Exception as e:
+        resp['statusCode'] = 500
+        resp['body']['err'] = "fail to process sync with error: {}".format(str(e))
+
+        return resp
+    
     result_s3_key = "{}/{}".format(result_path_s3_key, os.path.basename(out_file))
     region, bucket_name, s3_key = s3_upload_file_wrapper(
                     s3_client=s3_client,
@@ -164,18 +184,18 @@ def lambda_handler(event, context):
     return resp
 
 
-if __name__ == '__main__':
-    lambda_handler(
-        event={
-  "statusCode": 200,
-  "body": {
-    "exist": False,
-    "data": {
-      "o_url": "https://www.youtube.com/watch?v=H4bhRn2c8Cc",
-      "url": "https://rr5---sn-p5qlsn7s.googlevideo.com/videoplayback?expire=1674747054&ei=TkjSY_SjL8vr8wSul4Iw&ip=18.215.62.225&id=o-AH8Mjf9Fa6gI6Nfm-tRANhZSoUTWwluOfMtFxbNNga-N&itag=22&source=youtube&requiressl=yes&mh=bs&mm=31%2C26&mn=sn-p5qlsn7s%2Csn-vgqsknz7&ms=au%2Conr&mv=m&mvi=5&pl=23&pcm2=yes&gcr=us&initcwndbps=691250&vprv=1&mime=video%2Fmp4&cnr=14&ratebypass=yes&dur=1440.983&lmt=1633373905635161&mt=1674725113&fvip=2&fexp=24007246&c=ANDROID&txp=5416222&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cpcm2%2Cgcr%2Cvprv%2Cmime%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=AOq0QJ8wRQIgUEK8-farK6OwHBHgwew1QZ9HYt-GyADQCpTqEA4WFRACIQDFsSog3JQR3Uu1QmdN_xGYZj8iXqDM1NRhzKgFZKxlkg%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgQKZfyRLIH8v8iwcwhwBzAIZlNojkjxEy3J36SRy6sxcCIGq5hgPckjrrmI2kArZEB5vx9E6Vl20EYBLwtZosLQyJ",
-      "sp": "00:15:12",
-      "ep": "00:20:40"
-    }
-  }
-}, context=None
-    )
+# if __name__ == '__main__':
+#     lambda_handler(
+#         event={
+#             "statusCode": 200,
+#             "body": {
+#                 "exist": False,
+#                 "data": {
+#                     "o_url": "https://www.youtube.com/watch?v=HRdXUfpPGLI&t=13796s",
+#                     "url": "https://rr3---sn-n3cgv5qc5oq-bh2s7.googlevideo.com/videoplayback?expire=1674899054&ei=DZrUY-XgOreavcAPypKGyAU&ip=211.215.4.208&id=o-ALGure14o-YAtFaLnT0H4be8MQnpS-GghjdudqHsetCs&itag=22&source=youtube&requiressl=yes&mh=F_&mm=31%2C26&mn=sn-n3cgv5qc5oq-bh2s7%2Csn-oguelnz7&ms=au%2Conr&mv=m&mvi=3&pcm2cms=yes&pl=22&gcr=kr&initcwndbps=2073750&vprv=1&mime=video%2Fmp4&cnr=14&ratebypass=yes&dur=36389.569&lmt=1674752439750118&mt=1674877050&fvip=1&fexp=24007246&c=ANDROID&txp=5432434&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cgcr%2Cvprv%2Cmime%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=AOq0QJ8wRgIhAOy9wRQiQNXyftoB5lsCD35ogoDD5KD6mTN5FXCIrN3bAiEAnvA_EncA-vX9rChqio8ig7h-iT1fiVsLuOL-C66HMuQ%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpcm2cms%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRgIhAOy5MfuFvS8r48gsgrXGPHC4jvaPv_lExbs_oEyXxVPdAiEAr9plNLzxXPtbsxCKzCYghPA08qbwl4B8OpI11VmvI8g%3D",
+#                     "sp": "03:47:11.0",
+#                     "ep": "03:49:55.7"
+#                 }
+#             }
+# }, context=None
+#     )

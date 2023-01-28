@@ -17,7 +17,7 @@ def normalize_timestr(time_str):
         timestamp += pow(60, n)*t
     
     return timestamp
-        
+
 
 def get_body_parameters(event, *args):
     params = {}
@@ -32,26 +32,44 @@ def get_body_parameters(event, *args):
         for arg in args:
             if arg in body:
                 params[arg] = body[arg]
-    
+            else:
+                return None, "required parameter is not existed"
     if not params:
-        return None
+        return None, "empty parameter"
     
-    return params
+    return params, "success"
 
 def lambda_handler(event, context):
     # check requested video is already existed
     # check dynamodb
-    params = get_body_parameters(event, 'o_url', 'url', 'sp', 'ep')
+    """
+    required parameters
+    o_url : youtube video url which contained video id
+    url : google cloud signed url of youtube video
+    sp(str) : start point of the video
+    ep(str) : start point of the video
+    """
+    params, msg = get_body_parameters(event, 'o_url', 'url', 'sp', 'ep', 'm_duration')
     resp = {
         'statusCode': 400,
         'body':{
-            'exist': False,
+            'success': False,
             'data': None
         }
     }
+    # check required parameters
     if not params:
+        resp['body']['err'] = "invalid parameter: {}".format(msg)
+        logging.error(resp['body']['err'])
         return resp
     
+    # check parameter formats
+    timefmt_regex = re.compile(r'([0-9]+:)?[0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,3})?$')
+    if (not timefmt_regex.search(params['sp'])) or (not timefmt_regex.search(params['ep'])):
+        resp['body']['err'] = "invalid parameter: {}".format("timestamp format")
+        logging.error(resp['body']['err'])
+        return resp
+
     video_id:str = params['o_url']
     if video_id.startswith("https"):
         # requested with youtube video url
@@ -72,13 +90,13 @@ def lambda_handler(event, context):
             )
     
     if 'Item' not in query_result:
+        logging.info("dynamodb query: no item exists : key={} sortkey={}".format(video_id, track_range))
         resp['statusCode'] = 200
         resp['body']['data'] = params
-        logging.error("dynamodb query failed : key={} sortkey={}".format(video_id, track_range))
 
     else:
         resp['statusCode'] = 200
-        resp['body']['exist'] = True
+        resp['body']['success'] = True
         resp['body']['data'] = {
             "s3_key": query_result['Item']['S3Key']['S'],
             "bucket": query_result['Item']['BucketName']['S'],
