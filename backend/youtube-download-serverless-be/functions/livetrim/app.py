@@ -2,7 +2,6 @@ import os
 import gc
 import re
 import ssl
-import json
 import hashlib
 import logging
 
@@ -150,12 +149,24 @@ def lambda_handler(event, context):
         return resp
     
     result_s3_key = "{}/{}".format(result_path_s3_key, os.path.basename(out_file))
-    region, bucket_name, s3_key = s3_upload_file_wrapper(
-                    s3_client=s3_client,
-                    bucket=bucket_name,
-                    source=out_file,
-                    s3_key=result_s3_key
-                )
+    try:
+        region, bucket_name, s3_key = s3_upload_file_wrapper(
+                        s3_client=s3_client,
+                        bucket=bucket_name,
+                        source=out_file,
+                        s3_key=result_s3_key,
+                        content_type='video/mp4',
+                        acl='public-read'
+                    )
+    except Exception as e:
+        resp['statusCode'] = 500
+        resp['body'] = {
+            "success": False,
+            "err": "fail to put object at {}".format(bucket_name)
+        }
+        logging.error("fail to put object at {}/{} with {}".format(bucket_name, s3_key, str(e)))
+        return resp
+        
     logging.info("trimmed result is uploaded at {}/{}".format(bucket_name, result_s3_key))
     
     regex = re.compile(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*")

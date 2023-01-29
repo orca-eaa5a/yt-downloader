@@ -1,8 +1,6 @@
 import os
 import json
 import boto3
-import hashlib
-import requests
 
 SIGNED_URL_TIMEOUT = 600
 lambda_temp_directory = '/tmp'
@@ -62,17 +60,39 @@ def get_s3_presigned_url(s3_client, bucket, s3_key, timeout=SIGNED_URL_TIMEOUT):
     
     return s3_signed_url
 
-def s3_put_object_wrapper(s3_client, bucket, s3_key, body):
-    resp = s3_client.put_object(Body=body, Bucket=bucket, Key=s3_key)
+def s3_put_object_wrapper(s3_client, bucket, s3_key, body, acl=None, content_type=None):
+    kwargs = {
+        'Body': body,
+        'Bucket': bucket,
+        'Key': s3_key
+    }
+    if content_type:
+        kwargs['ContentType'] = content_type
+    if acl:
+        kwargs['ACL'] = acl
+    resp = s3_client.put_object(**kwargs)
     if resp['ResponseMetadata']['HTTPStatusCode'] != 200:
-        assert False
+        raise Exception("fail to upload file to s3")
         
     return s3_key
 
-def s3_upload_file_wrapper(s3_client, source, bucket, s3_key):
+def s3_upload_file_wrapper(s3_client, bucket, s3_key, source, acl=None, content_type=None):
+    kwargs = {
+        'Body': None,
+        'Bucket': bucket,
+        'Key': s3_key
+    }
+    if content_type:
+        kwargs['ContentType'] = content_type
+    if acl:
+        kwargs['ACL'] = acl
     with open(source, 'rb') as fp:
-        resp = s3_client.put_object(Body=fp, Bucket=bucket, Key=s3_key)
+        kwargs['Body'] = fp
+        resp = s3_client.put_object(**kwargs)
     
+    if resp['ResponseMetadata']['HTTPStatusCode'] != 200:
+        raise Exception("fail to upload file to s3")
+        
     # s3_signed_url = get_s3_presigned_url(
     #     s3_client=s3_client,
     #     bucket=bucket,
