@@ -181,17 +181,17 @@ def lambda_handler(event, context):
     )
     if resp:
         logging.info("trim result lookup is saved at DynamoDB")
-
-    resp['statusCode'] = 200
-    resp['body'] = {
-        "success": True,
-        "data": {
-            "bucket_region": region,
-            "bucket": bucket_name,
-            "s3_key": s3_key
+        resp['statusCode'] = 200
+        resp['body'] = {
+            "success": True,
+            "data": {
+                "bucket_region": region,
+                "bucket": bucket_name,
+                "s3_key": s3_key
+            }
         }
-    }
-
+    else:
+        resp['body']['err'] = "fail to save data at dynamodb"
     return resp
 
 

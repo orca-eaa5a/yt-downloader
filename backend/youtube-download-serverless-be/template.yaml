@@ -41,6 +41,9 @@ Parameters:
   TrimCacheDynTableSortKey:
     Type: String
     Default: Track
+  DynGlobalSecondaryIndexKey:
+    Type: String
+    Default: UniqueTrackId
 
 
 Resources:
@@ -94,12 +97,26 @@ Resources:
           AttributeType: S
         - AttributeName: !Ref TrimCacheDynTableSortKey
           AttributeType: S
+        - AttributeName: BucketName
+          AttributeType: S
+        - AttributeName: S3Key
+          AttributeType: S
+        - AttributeName: !Ref DynGlobalSecondaryIndexKey
+          AttributeType: S
 
       KeySchema:
         - AttributeName: !Ref TrimCacheDynTablePartitionKey
           KeyType: HASH
         - AttributeName: !Ref TrimCacheDynTableSortKey
           KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: VideoTrackHash
+          KeySchema:
+            - AttributeName: !Ref DynGlobalSecondaryIndexKey
+              KeyType: HASH
+          Projection:
+            ProjectionType: KEYS_ONLY
+
       BillingMode: PAY_PER_REQUEST
 
   GetTimestampsAboutYoutubeVideoFunction:
@@ -162,6 +179,8 @@ Resources:
             !Ref TrimCacheDynTablePartitionKey
           TrimCacheDynTableSortKey:
             !Ref TrimCacheDynTableSortKey
+          DynGlobalSecondaryIndexKey:
+            !Ref DynGlobalSecondaryIndexKey
           
       Policies:
       - S3CrudPolicy:
@@ -198,6 +217,8 @@ Resources:
             !Ref TrimCacheDynTablePartitionKey
           TrimCacheDynTableSortKey:
             !Ref TrimCacheDynTableSortKey
+          DynGlobalSecondaryIndexKey:
+            !Ref DynGlobalSecondaryIndexKey
           
       Policies:
       - S3CrudPolicy:
@@ -234,6 +255,8 @@ Resources:
             !Ref TrimCacheDynTablePartitionKey
           TrimCacheDynTableSortKey:
             !Ref TrimCacheDynTableSortKey
+          DynGlobalSecondaryIndexKey:
+            !Ref DynGlobalSecondaryIndexKey
           
       Policies:
       - S3CrudPolicy:
@@ -270,6 +293,8 @@ Resources:
             !Ref TrimCacheDynTablePartitionKey
           TrimCacheDynTableSortKey:
             !Ref TrimCacheDynTableSortKey
+          DynGlobalSecondaryIndexKey:
+            !Ref DynGlobalSecondaryIndexKey
           
       Policies:
       - S3CrudPolicy:
@@ -283,25 +308,30 @@ Resources:
 # End
 # --------------------------------------------------------------------------------- #
 
-  PreSignedURLGenerateFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: PreSignedURLGenerateFunction
-      CodeUri: functions/p-signed-generator
-      Handler: app.lambda_handler
-      Runtime: python3.9
-      Architectures:
-      - x86_64
-      Role: !GetAtt PreSignedURLGenerateFunctionExecutionRole.Arn
-      Environment:
-        Variables:
-          TrimmedResultBucket:
-            !Ref TrimmedResultBucketName
+  # PreSignedURLGenerateFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     FunctionName: PreSignedURLGenerateFunction
+  #     CodeUri: functions/p-signed-generator
+  #     Handler: app.lambda_handler
+  #     Runtime: python3.9
+  #     Architectures:
+  #     - x86_64
+  #     Role: !GetAtt PreSignedURLGenerateFunctionExecutionRole.Arn
+  #     Environment:
+  #       Variables:
+  #         TrimmedResultBucket:
+  #           !Ref TrimmedResultBucketName
 
-      Policies:
-        - S3CrudPolicy:
-            BucketName:
-              !Ref TrimmedResultBucketName
+  #     Policies:
+  #       - S3CrudPolicy:
+  #           BucketName:
+  #             !Ref TrimmedResultBucketName
+  # TrimStateMachineStartFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     FunctionName: TrimStateMachineStartFunction
+
 
   TrimResultLookupFunction:
     Type: AWS::Serverless::Function
@@ -340,7 +370,7 @@ Resources:
     Type: AWS::StepFunctions::StateMachine
     Properties:
       StateMachineName: YoutubeVideoTrimStateMachine
-      StateMachineType: EXPRESS
+      # StateMachineType: EXPRESS
       Definition:
         Comment: "Youtube Video Live Streaming Trimming Stepfunction Workflow"
         StartAt: TrimResultLookup
