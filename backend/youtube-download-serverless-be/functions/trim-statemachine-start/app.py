@@ -5,6 +5,9 @@ from awsutils.aws_util import *
 
 logging.getLogger().setLevel(logging.INFO)
 
+STEPFUNCTION_JOB_SAVED_TABLE = os.environ.get('STEPFUNCTION_JOB_SAVED_TABLE')
+STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY = os.environ.get('STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY')
+
 def parameter_validation(event):
     required_params = ['o_url', 'url', 'sp', 'ep', 'm_duration']
     if 'body' not in event:
@@ -41,7 +44,17 @@ def lambda_handler(event, context):
         return resp
     
     dyn_client = get_dynamodb_client()
-    dyn_resp = dyn_put_item(dyn_client, sha, exec_arn)
+    dyn_resp = dyn_put_item(
+        dyn_client=dyn_client,
+        table_name=STEPFUNCTION_JOB_SAVED_TABLE,
+        item={
+                STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY: {
+                    'S': sha
+                },
+                'ExecutionArn':{
+                    'S': exec_arn
+                }
+        })
     
     if not dyn_resp:
         resp['body']['err'] = "fail to save data at dynamodb"
