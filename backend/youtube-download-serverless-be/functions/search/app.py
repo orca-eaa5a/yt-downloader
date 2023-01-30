@@ -30,11 +30,17 @@ def make_video_info(yt:YouTube):
             })
     _streams = yt.vid_info['streamingData']['formats']
     for s in _streams:
-        streams.append({
-            'url': s['url'],
-            'mime_type': s['mimeType'].split(";")[0],
-            'quality': s['qualityLabel']
-        })
+        try:
+            mime_type = s['mimeType'].split(";")[0]
+            if mime_type and mime_type == "video/mp4":
+                streams.append({
+                    'url': s['url'],
+                    'mime_type': mime_type,
+                    'quality': s['qualityLabel']
+                })
+        except (KeyError, IndexError) as err:
+            continue 
+        
     yt_info = {
         'vid': yt.vid_info['videoDetails']['videoId'],
         'title': yt.vid_info['videoDetails']['title'],

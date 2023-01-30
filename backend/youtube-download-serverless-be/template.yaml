@@ -105,6 +105,7 @@ Resources:
   GetTimestampsAboutYoutubeVideoFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: GetTimestampsAboutYoutubeVideoFunction
       CodeUri: functions/get-timestamp-advanced
       Handler: app.lambda_handler
       Runtime: python3.9
@@ -118,6 +119,7 @@ Resources:
   GetYoutubeVideoInfoFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: GetYoutubeVideoInfoFunction
       CodeUri: functions/search
       Handler: app.lambda_handler
       Runtime: python3.9
@@ -284,6 +286,7 @@ Resources:
   PreSignedURLGenerateFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: PreSignedURLGenerateFunction
       CodeUri: functions/p-signed-generator
       Handler: app.lambda_handler
       Runtime: python3.9
@@ -303,6 +306,7 @@ Resources:
   TrimResultLookupFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: TrimResultLookupFunction
       CodeUri: functions/trim-result-lookup
       Handler: app.lambda_handler
       Runtime: python3.9
@@ -499,7 +503,7 @@ Resources:
       CompatibleRuntimes:
       - python3.9
       ContentUri:
-        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
+        Bucket: aws-sam-cli-managed-default-samclisourcebucket-26b0jbb1cg8w
         Key: ffmpeg.zip
       RetentionPolicy: Retain
       LicenseInfo: GPL-2.0-or-later
@@ -512,8 +516,8 @@ Resources:
       CompatibleRuntimes:
       - python3.9
       ContentUri:
-        Bucket: aws-sam-cli-managed-default-samclisourcebucket-a44pg41y2qcm
-        Key: mp4parser-0.5a.zip
+        Bucket: aws-sam-cli-managed-default-samclisourcebucket-26b0jbb1cg8w
+        Key: mp4parser-1.1a.zip
       RetentionPolicy: Retain
     Metadata:
       SamResourceId: Mp4ParserLayer
