@@ -4,6 +4,11 @@ import logging
 from awsutils.aws_util import *
 
 logging.getLogger().setLevel(logging.INFO)
+
+TRIM_RESULT_SAVED_TABLE = os.environ.get('TRIM_RESULT_SAVED_TABLE')
+TRIM_RESULT_SAVED_TABLE_PARTITION_KEY = os.environ.get('TRIM_RESULT_SAVED_TABLE_PARTITION_KEY')
+TRIM_RESULT_SAVED_TABLE_SORT_KEY = os.environ.get('TRIM_RESULT_SAVED_TABLE_SORT_KEY')
+
 YOUTUBE_VIDEO_PREFIX = "https://youtube.com/watch?v="
 
 def normalize_timestr(time_str):
@@ -84,9 +89,16 @@ def lambda_handler(event, context):
     )
     dyn_client = get_dynamodb_client()
     query_result = dyn_get_item(
-                dyn_client,
-                key=video_id,
-                sortkey=track_range
+                dyn_client=dyn_client,
+                table_name=TRIM_RESULT_SAVED_TABLE,
+                key={
+                    TRIM_RESULT_SAVED_TABLE_PARTITION_KEY: {
+                        "S": video_id
+                    },
+                    TRIM_RESULT_SAVED_TABLE_SORT_KEY:{
+                        "S": track_range
+                    }   
+                }
             )
     
     if 'Item' not in query_result:

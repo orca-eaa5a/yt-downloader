@@ -48,12 +48,14 @@ def lambda_handler(event, context):
         dyn_client=dyn_client,
         table_name=STEPFUNCTION_JOB_SAVED_TABLE,
         item={
+            'Item':{
                 STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY: {
                     'S': sha
                 },
                 'ExecutionArn':{
                     'S': exec_arn
                 }
+            }
         })
     
     if not dyn_resp:

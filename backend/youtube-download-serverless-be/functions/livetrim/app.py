@@ -13,11 +13,21 @@ from mp4parser.mp4parse import Mp4Parser
 
 logging.getLogger().setLevel(logging.INFO)
 
+BUCKET_NAME = os.environ.get('TrimmedResultBucket')
+TRIM_RESULT_SAVED_TABLE = os.environ.get('TRIM_RESULT_SAVED_TABLE')
+TRIM_RESULT_SAVED_TABLE_PARTITION_KEY = os.environ.get('TRIM_RESULT_SAVED_TABLE_PARTITION_KEY')
+TRIM_RESULT_SAVED_TABLE_SORT_KEY = os.environ.get('TRIM_RESULT_SAVED_TABLE_SORT_KEY')
+
+
 SIGNED_URL_TIMEOUT = 600
 tmp_path_s3_key = 'tmp'
 result_path_s3_key = 'result'
 
 ssl._create_default_https_context = ssl._create_unverified_context
+
+def get_unique_track_id(video_id, track_time):
+    return hashlib.sha256("{}:{}".format(video_id, track_time).encode()).hexdigest()
+
 
 def lambda_handler(event, context):
     """Sample pure Lambda function
@@ -77,7 +87,7 @@ def lambda_handler(event, context):
     logging.info('process garbage collecting')
 
     s3_client = get_s3_client()
-    bucket_name = get_dest_bucket()
+    bucket_name = BUCKET_NAME
     """
     check raw size over 400mb
     then, write to s3 not temp
@@ -172,12 +182,31 @@ def lambda_handler(event, context):
     regex = re.compile(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*")
     video_id = regex.search(params['o_url']).group(1)
     dyn_client = get_dynamodb_client()
+    sort_key = "{}-{}".format(int(sp),int(ep))
+    unq_track_id = get_unique_track_id(video_id, sort_key)
+    
     resp = dyn_put_item(
-        dyn_client,
-        key=video_id,
-        sort_key="{}-{}".format(int(sp),int(ep)),
-        bucket_name=bucket_name,
-        s3_key=result_s3_key
+        dyn_client=dyn_client,
+        table_name=TRIM_RESULT_SAVED_TABLE,
+        item={
+            'Item':{
+                TRIM_RESULT_SAVED_TABLE_PARTITION_KEY: {
+                    'S': video_id
+                },
+                TRIM_RESULT_SAVED_TABLE_SORT_KEY: {
+                    'S': sort_key
+                },
+                'BucketName':{
+                    'S': bucket_name
+                },
+                'S3Key':{
+                    'S': s3_key
+                },
+                'UniqueTrackID':{
+                    'S':unq_track_id
+                }
+            }
+        }
     )
     if resp:
         logging.info("trim result lookup is saved at DynamoDB")
