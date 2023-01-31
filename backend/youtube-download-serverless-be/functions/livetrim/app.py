@@ -17,7 +17,7 @@ BUCKET_NAME = os.environ.get('VIDEO_SAVED_BUCKET')
 TRACKINFO_SAVED_TABLE = os.environ.get('TRACKINFO_SAVED_TABLE')
 TRACKINFO_SAVED_TABLE_PARTITION_KEY = os.environ.get('TRACKINFO_SAVED_TABLE_PARTITION_KEY')
 TRACKINFO_SAVED_TABLE_SORT_KEY = os.environ.get('TRACKINFO_SAVED_TABLE_SORT_KEY')
-
+TRACKINFO_SAVED_TABLE_GSI = os.environ.get('TRACKINFO_SAVED_TABLE_GSI')
 
 SIGNED_URL_TIMEOUT = 600
 tmp_path_s3_key = 'tmp'
@@ -202,7 +202,7 @@ def lambda_handler(event, context):
                 'S3Key':{
                     'S': s3_key
                 },
-                'UniqueTrackID':{
+                TRACKINFO_SAVED_TABLE_GSI:{
                     'S':unq_track_id
                 }
             }

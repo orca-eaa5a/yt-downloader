@@ -20,7 +20,7 @@ Globals:
 Parameters:
   VideoSavedBucketName:
     Type: String
-    Default: TrimResultBucket
+    Default: trim-result-bucket
   TrackInfoSavedTableName:
     Type: String
     Default: TrackInfoSavedTable
@@ -41,9 +41,6 @@ Parameters:
     Default: ExecutionID
 
 Resources:
-# --------------------------------------------------------------------------------- #
-
-# --------------------------------------------------------------------------------- #
   VideoSavedBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -61,10 +58,6 @@ Resources:
           AttributeType: S
         - AttributeName: !Ref TrackInfoSavedTableSortKey
           AttributeType: S
-        - AttributeName: BucketName
-          AttributeType: S
-        - AttributeName: S3Key
-          AttributeType: S
         - AttributeName: !Ref TrackInfoSavedTableGSI
           AttributeType: S
 
@@ -74,7 +67,7 @@ Resources:
         - AttributeName: !Ref TrackInfoSavedTableSortKey
           KeyType: RANGE
       GlobalSecondaryIndexes:
-        - IndexName: UniqueTrackIDIndex
+        - IndexName: !Ref TrackInfoSavedTableGSI
           KeySchema:
             - AttributeName: !Ref TrackInfoSavedTableGSI
               KeyType: HASH
@@ -88,12 +81,12 @@ Resources:
     Properties:
       TableName: !Ref StepFunctionJobSavedTableName
       AttributeDefinitions:
-        - AttributeName: ExecutionArn
-          AttributeType: S
         - AttributeName: !Ref StepFunctionJobSavedTablePartitionKey
           AttributeType: S
-        - AttributeName: !Ref TrackInfoSavedTableGSI
-          AttributeType: S
+        # - AttributeName: ExecutionArn
+        #   AttributeType: S
+        # - AttributeName: !Ref TrackInfoSavedTableGSI
+        #   AttributeType: S
       
       KeySchema:
         - AttributeName: !Ref StepFunctionJobSavedTablePartitionKey
@@ -169,12 +162,12 @@ Resources:
         Variables:
           TRACKINFO_SAVED_TABLE:
             !Ref TrackInfoSavedTableName
+          STEPFUNCTION_JOB_SAVED_TABLE:
+            !Ref StepFunctionJobSavedTableName
           TRACKINFO_SAVED_TABLE_PARTITION_KEY:
             !Ref TrackInfoSavedTablePartitionKey
           TRACKINFO_SAVED_TABLE_SORT_KEY:
             !Ref TrackInfoSavedTableSortKey
-          STEPFUNCTION_JOB_SAVED_TABLE:
-            !Ref StepFunctionJobSavedTableName
           STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY:
             !Ref StepFunctionJobSavedTablePartitionKey
           TRACKINFO_SAVED_TABLE_GSI:
@@ -185,7 +178,7 @@ Resources:
   TrackExtractStateMachineLaunchFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: TrackExtractStateMachineHealthcheckFunction
+      FunctionName: TrackExtractStateMachineLaunchFunction
       CodeUri: functions/trim-statemachine-start
       Handler: app.lambda_handler
       Runtime: python3.9
@@ -198,6 +191,8 @@ Resources:
             !Ref StepFunctionJobSavedTableName
           STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY:
             !Ref StepFunctionJobSavedTablePartitionKey
+          TRACKINFO_SAVED_TABLE_GSI:
+            !Ref TrackInfoSavedTableGSI
     Metadata:
       SamResourceId: TrackExtractStateMachineLaunchFunction
 # --------------------------------------------------------------------------------- #
@@ -231,8 +226,8 @@ Resources:
             !Ref TrackInfoSavedTablePartitionKey
           TRACKINFO_SAVED_TABLE_SORT_KEY:
             !Ref TrackInfoSavedTableSortKey
-          # TRACKINFO_SAVED_TABLE_GSI:
-          #   !Ref TrackInfoSavedTableGSI
+          TRACKINFO_SAVED_TABLE_GSI:
+            !Ref TrackInfoSavedTableGSI
           
       Policies:
       - S3CrudPolicy:
@@ -269,6 +264,8 @@ Resources:
             !Ref TrackInfoSavedTablePartitionKey
           TRACKINFO_SAVED_TABLE_SORT_KEY:
             !Ref TrackInfoSavedTableSortKey
+          TRACKINFO_SAVED_TABLE_GSI:
+            !Ref TrackInfoSavedTableGSI
           
       Policies:
       - S3CrudPolicy:
@@ -305,6 +302,8 @@ Resources:
             !Ref TrackInfoSavedTablePartitionKey
           TRACKINFO_SAVED_TABLE_SORT_KEY:
             !Ref TrackInfoSavedTableSortKey
+          TRACKINFO_SAVED_TABLE_GSI:
+            !Ref TrackInfoSavedTableGSI
           
       Policies:
       - S3CrudPolicy:
@@ -341,6 +340,8 @@ Resources:
             !Ref TrackInfoSavedTablePartitionKey
           TRACKINFO_SAVED_TABLE_SORT_KEY:
             !Ref TrackInfoSavedTableSortKey
+          TRACKINFO_SAVED_TABLE_GSI:
+            !Ref TrackInfoSavedTableGSI
           
       Policies:
       - S3CrudPolicy:
@@ -454,7 +455,7 @@ Resources:
                 MaxAttempts: 0
             End:
               true
-      RoleArn: YoutubeVideoTrackDownloadStepFunctionRole.Arn
+      RoleArn: !GetAtt YoutubeVideoTrackDownloadStepFunctionRole.Arn
 
   YoutubeVideoTrimStateMachine:
     Type: AWS::StepFunctions::StateMachine
@@ -655,7 +656,7 @@ Resources:
   TrackExtractStateMachineLaunchFunctionExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: TrimLookupFunctionExecutionRole
+      RoleName: TrackExtractStateMachineLaunchFunctionExecutionRole
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -677,21 +678,20 @@ Resources:
                   - "states:StopExecution"
                   - "states:StartExecution"
                   - "states:StartSyncExecution"
+
               - Sid: StepFunctionJobSavedTableWritePolicy
                 Effect: Allow
                 Resource: !GetAtt StepFunctionJobSavedTable.Arn
                 Action:
                   - "dynamodb:PutItem"
-                  # - "dynamodb:GetItem"
-                  # - "dynamodb:Query"
-                  # - "dynamodb:Scan"
+
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   
   TrackExtractStateMachineHealthcheckFunctionExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: TrimLookupFunctionExecutionRole
+      RoleName: TrackExtractStateMachineHealthcheckFunctionExecutionRole
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
