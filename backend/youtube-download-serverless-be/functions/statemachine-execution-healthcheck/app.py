@@ -6,15 +6,15 @@ logging.getLogger().setLevel(logging.INFO)
 
 # TrimResultSavedDynamoDB
 # StepfunctionJobSavedDynamoDB
-TRIM_RESULT_SAVED_TABLE = os.environ.get('TRIM_RESULT_SAVED_TABLE')
+TRACKINFO_SAVED_TABLE = os.environ.get('TRACKINFO_SAVED_TABLE')
 STEPFUNCTION_JOB_SAVED_TABLE = os.environ.get('STEPFUNCTION_JOB_SAVED_TABLE')
 
-TRIM_RESULT_SAVED_TABLE_PARTITION_KEY = os.environ.get('TRIM_RESULT_SAVED_TABLE_PARTITION_KEY')
-TRIM_RESULT_SAVED_TABLE_SORT_KEY = os.environ.get('TRIM_RESULT_SAVED_TABLE_SORT_KEY')
+TRACKINFO_SAVED_TABLE_PARTITION_KEY = os.environ.get('TRACKINFO_SAVED_TABLE_PARTITION_KEY')
+TRACKINFO_SAVED_TABLE_SORT_KEY = os.environ.get('TRACKINFO_SAVED_TABLE_SORT_KEY')
 
 STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY = os.environ.get('STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY')
 
-TRIM_RESULT_SAVED_TABLE_GSI = os.environ.get('TRIM_RESULT_SAVED_TABLE_GSI')
+TRACKINFO_SAVED_TABLE_GSI = os.environ.get('TRACKINFO_SAVED_TABLE_GSI')
 
 CLOUDFRONT_DOMAIN = "d2h9qmde94lnl.cloudfront.net"
 
@@ -83,8 +83,8 @@ def lambda_handler(event, context):
         trackID = query_result['Item']['UniqueTrackID']
         query_result = dyn_query(
             dyn_client=dyn_client,
-            table_name=TRIM_RESULT_SAVED_TABLE,
-            index=TRIM_RESULT_SAVED_TABLE_GSI,
+            table_name=TRACKINFO_SAVED_TABLE,
+            index=TRACKINFO_SAVED_TABLE_GSI,
             condition_exp={
                 'KeyConditionExpression': "UniqueTrackID = :UniqueTrackID",
                 'ExpressionAttributeValues':{
@@ -99,12 +99,12 @@ def lambda_handler(event, context):
             return resp
         
         if not 'Items' in query_result:
-            resp['body']['err'] = "{} is empty".format(TRIM_RESULT_SAVED_TABLE)
+            resp['body']['err'] = "{} is empty".format(TRACKINFO_SAVED_TABLE)
             return resp
         
         items = query_result['Items']
         if len(items) > 1:
-            logging.error("UniqueTrackID of {} is not unique: {}".format(TRIM_RESULT_SAVED_TABLE, trackID))
+            logging.error("UniqueTrackID of {} is not unique: {}".format(TRACKINFO_SAVED_TABLE, trackID))
             resp['body']['err'] = "requested track is not invalid: {}".format(trackID)
             return resp
         

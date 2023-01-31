@@ -13,10 +13,10 @@ from mp4parser.mp4parse import Mp4Parser
 
 logging.getLogger().setLevel(logging.INFO)
 
-BUCKET_NAME = os.environ.get('TrimmedResultBucket')
-TRIM_RESULT_SAVED_TABLE = os.environ.get('TRIM_RESULT_SAVED_TABLE')
-TRIM_RESULT_SAVED_TABLE_PARTITION_KEY = os.environ.get('TRIM_RESULT_SAVED_TABLE_PARTITION_KEY')
-TRIM_RESULT_SAVED_TABLE_SORT_KEY = os.environ.get('TRIM_RESULT_SAVED_TABLE_SORT_KEY')
+BUCKET_NAME = os.environ.get('VIDEO_SAVED_BUCKET')
+TRACKINFO_SAVED_TABLE = os.environ.get('TRACKINFO_SAVED_TABLE')
+TRACKINFO_SAVED_TABLE_PARTITION_KEY = os.environ.get('TRACKINFO_SAVED_TABLE_PARTITION_KEY')
+TRACKINFO_SAVED_TABLE_SORT_KEY = os.environ.get('TRACKINFO_SAVED_TABLE_SORT_KEY')
 
 
 SIGNED_URL_TIMEOUT = 600
@@ -187,13 +187,13 @@ def lambda_handler(event, context):
     
     resp = dyn_put_item(
         dyn_client=dyn_client,
-        table_name=TRIM_RESULT_SAVED_TABLE,
+        table_name=TRACKINFO_SAVED_TABLE,
         item={
             'Item':{
-                TRIM_RESULT_SAVED_TABLE_PARTITION_KEY: {
+                TRACKINFO_SAVED_TABLE_PARTITION_KEY: {
                     'S': video_id
                 },
-                TRIM_RESULT_SAVED_TABLE_SORT_KEY: {
+                TRACKINFO_SAVED_TABLE_SORT_KEY: {
                     'S': sort_key
                 },
                 'BucketName':{

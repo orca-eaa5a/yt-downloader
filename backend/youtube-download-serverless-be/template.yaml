@@ -14,109 +14,91 @@ Globals:
 
 
 # --------------------------------------------------------------------------------- #
-# Parmaters for template
-# - TrimmedResultBucketName
-#   : S3 Bucket Name
-#
-# - TrimCacheDynTableName
-#   : DynamoDB Table Name
-#
-# - TrimCacheDynTablePartitionKey
-#   : DynamoDB Partition Key name
-#
-# - TrimCacheDynTableSortKey
-#   : DynamoDB Sort Key name
+
 # --------------------------------------------------------------------------------- #
 
 Parameters:
-  TrimmedResultBucketName:
+  VideoSavedBucketName:
     Type: String
-    Default: trim-result-bucket
-  TrimCacheDynTableName:
+    Default: TrimResultBucket
+  TrackInfoSavedTableName:
     Type: String
-    Default: trim-result-lookup-table
-  TrimCacheDynTablePartitionKey:
+    Default: TrackInfoSavedTable
+  TrackInfoSavedTablePartitionKey:
     Type: String
-    Default: VideoId
-  TrimCacheDynTableSortKey:
+    Default: VideoID
+  TrackInfoSavedTableSortKey:
     Type: String
     Default: Track
-  DynGlobalSecondaryIndexKey:
+  TrackInfoSavedTableGSI:
     Type: String
-    Default: UniqueTrackId
-
+    Default: UniqueTrackID
+  StepFunctionJobSavedTableName:
+    Type: String
+    Default: StepFunctionJobSavedTable
+  StepFunctionJobSavedTablePartitionKey:
+    Type: String
+    Default: ExecutionID
 
 Resources:
 # --------------------------------------------------------------------------------- #
-# Definitions About AWS Resources which Composed Service 
-# 1. S3 Bucket
-#   - TrimResultBucket
-#
-# 2. DynamoDB
-#   - TrimResultLookupTable
-#
-# 3. Lambda Functions
-#   - GetTimestampsAboutYoutubeVideoFunction
-#
-#   - GetTimestampsAboutYoutubeVideoFunction
-#   
-#   - GetYoutubeVideoInfoFunction
-#   
-#   - LiveTrimYoutubeVideoFunction
-#   
-#   - PreSignedURLGenerateFunction
-#   
-#   - TrimResultLookupFunction
-#
-#   - ErrorReciverFunction
-#
-# 4. StepFunction
-#   - YoutubeVideoTrimStateMachine
-#
-# 5. Lambda Layers
-#   - SearchLayer
-#
-#   - FFmpegLayer
-#
-#   - Mp4Parserlayer
+
 # --------------------------------------------------------------------------------- #
-  TrimResultBucket:
+  VideoSavedBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName:
-        !Ref TrimmedResultBucketName
+        !Ref VideoSavedBucketName
     Metadata:
-      SamResourceId: TrimResultBucket
+      SamResourceId: VideoSavedBucket
 
-  TrimResultLookupTable:
+  TrackInfoSavedTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Ref TrimCacheDynTableName
+      TableName: !Ref TrackInfoSavedTableName
       AttributeDefinitions:
-        - AttributeName: !Ref TrimCacheDynTablePartitionKey
+        - AttributeName: !Ref TrackInfoSavedTablePartitionKey
           AttributeType: S
-        - AttributeName: !Ref TrimCacheDynTableSortKey
+        - AttributeName: !Ref TrackInfoSavedTableSortKey
           AttributeType: S
         - AttributeName: BucketName
           AttributeType: S
         - AttributeName: S3Key
           AttributeType: S
-        - AttributeName: !Ref DynGlobalSecondaryIndexKey
+        - AttributeName: !Ref TrackInfoSavedTableGSI
           AttributeType: S
 
       KeySchema:
-        - AttributeName: !Ref TrimCacheDynTablePartitionKey
+        - AttributeName: !Ref TrackInfoSavedTablePartitionKey
           KeyType: HASH
-        - AttributeName: !Ref TrimCacheDynTableSortKey
+        - AttributeName: !Ref TrackInfoSavedTableSortKey
           KeyType: RANGE
       GlobalSecondaryIndexes:
-        - IndexName: VideoTrackHash
+        - IndexName: UniqueTrackIDIndex
           KeySchema:
-            - AttributeName: !Ref DynGlobalSecondaryIndexKey
+            - AttributeName: !Ref TrackInfoSavedTableGSI
               KeyType: HASH
           Projection:
             ProjectionType: KEYS_ONLY
 
+      BillingMode: PAY_PER_REQUEST
+  
+  StepFunctionJobSavedTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref StepFunctionJobSavedTableName
+      AttributeDefinitions:
+        - AttributeName: ExecutionArn
+          AttributeType: S
+        - AttributeName: !Ref StepFunctionJobSavedTablePartitionKey
+          AttributeType: S
+        - AttributeName: !Ref TrackInfoSavedTableGSI
+          AttributeType: S
+      
+      KeySchema:
+        - AttributeName: !Ref StepFunctionJobSavedTablePartitionKey
+          KeyType: HASH
+      
       BillingMode: PAY_PER_REQUEST
 
   GetTimestampsAboutYoutubeVideoFunction:
@@ -148,6 +130,76 @@ Resources:
     Metadata:
       SamResourceId: GetYoutubeVideoInfoFunction
 
+  VideoUrlGenerateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: VideoUrlGenerateFunction
+      CodeUri: functions/get-timestamp-advanced
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+    Metadata:
+      SamResourceId: VideoUrlGenerateFunction
+
+  ErrorReceiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ErrorReceiveFunction
+      CodeUri: functions/err-receiver
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+    
+    Metadata:
+      SamResourceId: ErrorReceiveFunction
+
+  TrackExtractStateMachineHealthcheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: TrackExtractStateMachineHealthcheckFunction
+      CodeUri: functions/statemachine-execution-healthcheck
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt TrackExtractStateMachineHealthcheckFunctionExecutionRole.Arn
+      Environment:
+        Variables:
+          TRACKINFO_SAVED_TABLE:
+            !Ref TrackInfoSavedTableName
+          TRACKINFO_SAVED_TABLE_PARTITION_KEY:
+            !Ref TrackInfoSavedTablePartitionKey
+          TRACKINFO_SAVED_TABLE_SORT_KEY:
+            !Ref TrackInfoSavedTableSortKey
+          STEPFUNCTION_JOB_SAVED_TABLE:
+            !Ref StepFunctionJobSavedTableName
+          STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY:
+            !Ref StepFunctionJobSavedTablePartitionKey
+          TRACKINFO_SAVED_TABLE_GSI:
+            !Ref TrackInfoSavedTableGSI
+    Metadata:
+      SamResourceId: TrackExtractStateMachineHealthcheckFunction
+  
+  TrackExtractStateMachineLaunchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: TrackExtractStateMachineHealthcheckFunction
+      CodeUri: functions/trim-statemachine-start
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Role: !GetAtt TrackExtractStateMachineLaunchFunctionExecutionRole.Arn
+      Environment:
+        Variables:
+          STEPFUNCTION_JOB_SAVED_TABLE:
+            !Ref StepFunctionJobSavedTableName
+          STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY:
+            !Ref StepFunctionJobSavedTablePartitionKey
+    Metadata:
+      SamResourceId: TrackExtractStateMachineLaunchFunction
 # --------------------------------------------------------------------------------- #
 # Definitions About Lambda Function : LiveTrimYoutubeVideoFunction
 # --------------------------------------------------------------------------------- #
@@ -171,21 +223,21 @@ Resources:
       
       Environment:
         Variables:
-          TrimmedResultBucket:
-            !Ref TrimmedResultBucketName
-          TrimCacheDynDB:
-            !Ref TrimCacheDynTableName
-          TrimCacheDynTablePartitionKey:
-            !Ref TrimCacheDynTablePartitionKey
-          TrimCacheDynTableSortKey:
-            !Ref TrimCacheDynTableSortKey
-          DynGlobalSecondaryIndexKey:
-            !Ref DynGlobalSecondaryIndexKey
+          VIDEO_SAVED_BUCKET:
+            !Ref VideoSavedBucketName
+          TRACKINFO_SAVED_TABLE:
+            !Ref TrackInfoSavedTableName
+          TRACKINFO_SAVED_TABLE_PARTITION_KEY:
+            !Ref TrackInfoSavedTablePartitionKey
+          TRACKINFO_SAVED_TABLE_SORT_KEY:
+            !Ref TrackInfoSavedTableSortKey
+          # TRACKINFO_SAVED_TABLE_GSI:
+          #   !Ref TrackInfoSavedTableGSI
           
       Policies:
       - S3CrudPolicy:
           BucketName:
-            !Ref TrimmedResultBucketName
+            !Ref VideoSavedBucketName
 
     Metadata:
       SamResourceId: LiveTrimYoutubeVideoFunctionSmall
@@ -209,21 +261,19 @@ Resources:
       
       Environment:
         Variables:
-          TrimmedResultBucket:
-            !Ref TrimmedResultBucketName
-          TrimCacheDynDB:
-            !Ref TrimCacheDynTableName
-          TrimCacheDynTablePartitionKey:
-            !Ref TrimCacheDynTablePartitionKey
-          TrimCacheDynTableSortKey:
-            !Ref TrimCacheDynTableSortKey
-          DynGlobalSecondaryIndexKey:
-            !Ref DynGlobalSecondaryIndexKey
+          VIDEO_SAVED_BUCKET:
+            !Ref VideoSavedBucketName
+          TRACKINFO_SAVED_TABLE:
+            !Ref TrackInfoSavedTableName
+          TRACKINFO_SAVED_TABLE_PARTITION_KEY:
+            !Ref TrackInfoSavedTablePartitionKey
+          TRACKINFO_SAVED_TABLE_SORT_KEY:
+            !Ref TrackInfoSavedTableSortKey
           
       Policies:
       - S3CrudPolicy:
           BucketName:
-            !Ref TrimmedResultBucketName
+            !Ref VideoSavedBucketName
 
     Metadata:
       SamResourceId: LiveTrimYoutubeVideoFunctionMedium
@@ -247,21 +297,19 @@ Resources:
       
       Environment:
         Variables:
-          TrimmedResultBucket:
-            !Ref TrimmedResultBucketName
-          TrimCacheDynDB:
-            !Ref TrimCacheDynTableName
-          TrimCacheDynTablePartitionKey:
-            !Ref TrimCacheDynTablePartitionKey
-          TrimCacheDynTableSortKey:
-            !Ref TrimCacheDynTableSortKey
-          DynGlobalSecondaryIndexKey:
-            !Ref DynGlobalSecondaryIndexKey
+          VIDEO_SAVED_BUCKET:
+            !Ref VideoSavedBucketName
+          TRACKINFO_SAVED_TABLE:
+            !Ref TrackInfoSavedTableName
+          TRACKINFO_SAVED_TABLE_PARTITION_KEY:
+            !Ref TrackInfoSavedTablePartitionKey
+          TRACKINFO_SAVED_TABLE_SORT_KEY:
+            !Ref TrackInfoSavedTableSortKey
           
       Policies:
       - S3CrudPolicy:
           BucketName:
-            !Ref TrimmedResultBucketName
+            !Ref VideoSavedBucketName
 
     Metadata:
       SamResourceId: LiveTrimYoutubeVideoFunctionLarge
@@ -285,21 +333,19 @@ Resources:
       
       Environment:
         Variables:
-          TrimmedResultBucket:
-            !Ref TrimmedResultBucketName
-          TrimCacheDynDB:
-            !Ref TrimCacheDynTableName
-          TrimCacheDynTablePartitionKey:
-            !Ref TrimCacheDynTablePartitionKey
-          TrimCacheDynTableSortKey:
-            !Ref TrimCacheDynTableSortKey
-          DynGlobalSecondaryIndexKey:
-            !Ref DynGlobalSecondaryIndexKey
+          VIDEO_SAVED_BUCKET:
+            !Ref VideoSavedBucketName
+          TRACKINFO_SAVED_TABLE:
+            !Ref TrackInfoSavedTableName
+          TRACKINFO_SAVED_TABLE_PARTITION_KEY:
+            !Ref TrackInfoSavedTablePartitionKey
+          TRACKINFO_SAVED_TABLE_SORT_KEY:
+            !Ref TrackInfoSavedTableSortKey
           
       Policies:
       - S3CrudPolicy:
           BucketName:
-            !Ref TrimmedResultBucketName
+            !Ref VideoSavedBucketName
 
     Metadata:
       SamResourceId: LiveTrimYoutubeVideoFunctionXLarge
@@ -307,31 +353,6 @@ Resources:
 # --------------------------------------------------------------------------------- #
 # End
 # --------------------------------------------------------------------------------- #
-
-  # PreSignedURLGenerateFunction:
-  #   Type: AWS::Serverless::Function
-  #   Properties:
-  #     FunctionName: PreSignedURLGenerateFunction
-  #     CodeUri: functions/p-signed-generator
-  #     Handler: app.lambda_handler
-  #     Runtime: python3.9
-  #     Architectures:
-  #     - x86_64
-  #     Role: !GetAtt PreSignedURLGenerateFunctionExecutionRole.Arn
-  #     Environment:
-  #       Variables:
-  #         TrimmedResultBucket:
-  #           !Ref TrimmedResultBucketName
-
-  #     Policies:
-  #       - S3CrudPolicy:
-  #           BucketName:
-  #             !Ref TrimmedResultBucketName
-  # TrimStateMachineStartFunction:
-  #   Type: AWS::Serverless::Function
-  #   Properties:
-  #     FunctionName: TrimStateMachineStartFunction
-
 
   TrimResultLookupFunction:
     Type: AWS::Serverless::Function
@@ -345,37 +366,23 @@ Resources:
       Role: !GetAtt TrimLookupFunctionExecutionRole.Arn
       Environment:
         Variables:
-          TrimCacheDynDB:
-            !Ref TrimCacheDynTableName
-          TrimCacheDynTablePartitionKey:
-            !Ref TrimCacheDynTablePartitionKey
-          TrimCacheDynTableSortKey:
-            !Ref TrimCacheDynTableSortKey
-
-  ErrorReceiveFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: ErrorReceiveFunction
-      CodeUri: functions/err-receiver
-      Handler: app.lambda_handler
-      Runtime: python3.9
-      Architectures:
-      - x86_64
-    
-    Metadata:
-      SamResourceId: ErrorReceiveFunction
+          TRACKINFO_SAVED_TABLE:
+            !Ref TrackInfoSavedTableName
+          TRACKINFO_SAVED_TABLE_PARTITION_KEY:
+            !Ref TrackInfoSavedTablePartitionKey
+          TRACKINFO_SAVED_TABLE_SORT_KEY:
+            !Ref TrackInfoSavedTableSortKey
       
-
-  YoutubeVideoTrimStateMachine:
+  YoutubeVideoTrackDownloadStateMachine:
     Type: AWS::StepFunctions::StateMachine
     Properties:
-      StateMachineName: YoutubeVideoTrimStateMachine
-      # StateMachineType: EXPRESS
+      StateMachineName: YoutubeVideoTrackDownloadStateMachine
+      StateMachineType: EXPRESS
       Definition:
-        Comment: "Youtube Video Live Streaming Trimming Stepfunction Workflow"
-        StartAt: TrimResultLookup
+        Comment: "Youtube Video Track Download Stepfunction Workflow"
+        StartAt: TrackLookup
         States:
-          TrimResultLookup:
+          TrackLookup:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
             OutputPath: $.Payload
@@ -388,26 +395,75 @@ Resources:
                   - "Lambda.AWSLambdaException"
                 MaxAttempts: 0
             Next:
-              LookupFunctionReturnCheckBrnach
-
-          LookupFunctionReturnCheckBrnach:
+              ErrorCheckBranch
+          ErrorCheckBranch:
             Type: Choice
             Choices:
               - Variable: $.statusCode
                 NumericEquals: 200
-                Next: LookupResultBranch
+                Next: LookupResultCheckBranch
             Default: ErrReciver
-          
-          LookupResultBranch:
+          LookupResultCheckBranch:
             Type: Choice
             Choices:
               - Variable: $.body.success
                 BooleanEquals: true
-                Next: PreSignedURLGenerate
+                Next: VideoUrlGenerate
               - Variable: $.body.success
                 BooleanEquals: false
-                Next: TrimHandlingBranch
-          
+                Next: TrackExtractStateMachineLaunch
+          TrackExtractStateMachineLaunch:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt TrackExtractStateMachineLaunchFunction.Arn
+            Retry:
+              - ErrorEquals:
+                  - "Lambda.ServiceException"
+                  - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            End:
+              true
+          ErrReciver:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt ErrorReceiveFunction.Arn
+            Retry:
+              - ErrorEquals:
+                - "Lambda.ServiceException"
+                - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            End:
+              true
+          VideoUrlGenerate:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: !GetAtt VideoUrlGenerateFunction.Arn
+            Retry:
+              - ErrorEquals:
+                - "Lambda.ServiceException"
+                - "Lambda.AWSLambdaException"
+                MaxAttempts: 0
+            End:
+              true
+      RoleArn: YoutubeVideoTrackDownloadStepFunctionRole.Arn
+
+  YoutubeVideoTrimStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: YoutubeVideoTrimStateMachine
+      Definition:
+        Comment: "Youtube Video Live Streaming Trimming Stepfunction Workflow"
+        StartAt: TrimHandlingBranch
+        States:
           TrimHandlingBranch:
             Type: Choice
             Choices:
@@ -442,7 +498,7 @@ Resources:
                 - "Lambda.ServiceException"
                 - "Lambda.AWSLambdaException"
                 MaxAttempts: 0
-            Next: PreSignedURLGenerate
+            End: true
 
           TrimMedium:
             Type: Task
@@ -456,7 +512,7 @@ Resources:
                 - "Lambda.ServiceException"
                 - "Lambda.AWSLambdaException"
                 MaxAttempts: 0
-            Next: PreSignedURLGenerate
+            End: true
 
           TrimLarge:
             Type: Task
@@ -470,7 +526,7 @@ Resources:
                 - "Lambda.ServiceException"
                 - "Lambda.AWSLambdaException"
                 MaxAttempts: 0
-            Next: PreSignedURLGenerate
+            End: true
 
           TrimXLarge:
             Type: Task
@@ -484,37 +540,7 @@ Resources:
                 - "Lambda.ServiceException"
                 - "Lambda.AWSLambdaException"
                 MaxAttempts: 0
-            Next: PreSignedURLGenerate
-
-          ErrReciver:
-            Type: Task
-            Resource: arn:aws:states:::lambda:invoke
-            OutputPath: $.Payload
-            Parameters:
-              Payload.$: $
-              FunctionName: !GetAtt ErrorReceiveFunction.Arn
-            Retry:
-              - ErrorEquals:
-                - "Lambda.ServiceException"
-                - "Lambda.AWSLambdaException"
-                MaxAttempts: 0
-            End:
-              true
-
-          PreSignedURLGenerate:
-            Type: Task
-            Resource: arn:aws:states:::lambda:invoke
-            OutputPath: $.Payload
-            Parameters:
-              Payload.$: $
-              FunctionName: !GetAtt PreSignedURLGenerateFunction.Arn
-            Retry:
-              - ErrorEquals:
-                  - "Lambda.ServiceException"
-                  - "Lambda.AWSLambdaException"
-                MaxAttempts: 0
-            End:
-              true
+            End: true
       RoleArn: !GetAtt YoutubeVideoTrimStepFunctionRole.Arn
       
   SearchLayer:
@@ -553,18 +579,7 @@ Resources:
       SamResourceId: Mp4ParserLayer
   
 # --------------------------------------------------------------------------------- #
-# Definitions About Roles for AWS Resources
-# 1. TrimLookupFunctionExecutionRole
-#   : TrimResultLookupFunction
-#
-# 2. LiveTrimFunctionExecutionRole
-#   : LiveTrimYoutubeVideoFunction
-#   
-# 3. PreSignedURLGenerateFunctionExecutionRole
-#   - PreSignedURLGenerateFunction
-#
-# 4. YoutubeVideoTrimStepFunctionRole
-#   - YoutubeVideoTrimStateMachine
+
 # --------------------------------------------------------------------------------- #
 
   TrimLookupFunctionExecutionRole:
@@ -585,23 +600,13 @@ Resources:
           PolicyDocument:
             Version: 2012-10-17
             Statement:
-              - Sid: TrimResultLookupTableReadOnlyPolicy
+              - Sid: TrackInfoSavedTableReadOnlyPolicy
                 Effect: Allow
-                Resource: !GetAtt TrimResultLookupTable.Arn
+                Resource: !GetAtt TrackInfoSavedTable.Arn
                 Action:
                   - "dynamodb:GetItem"
                   - "dynamodb:Query"
                   - "dynamodb:Scan"
-              - Sid: LambdaInvokeFunction
-                Effect: Allow
-                Resource: 
-                  - !GetAtt LiveTrimYoutubeVideoFunctionSmall.Arn
-                  - !GetAtt LiveTrimYoutubeVideoFunctionMedium.Arn
-                  - !GetAtt LiveTrimYoutubeVideoFunctionLarge.Arn
-                  - !GetAtt LiveTrimYoutubeVideoFunctionXLarge.Arn
-                  - !GetAtt PreSignedURLGenerateFunction.Arn
-                Action:
-                  - "lambda:InvokeFunction"
           
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -624,41 +629,35 @@ Resources:
           PolicyDocument:
             Version: 2012-10-17
             Statement:
-              - Sid: TrimmedResultBucketReadWrite
+              - Sid: VideoSavedBucketReadWrite
                 Effect: Allow
                 Resource:
-                  - !GetAtt 'TrimResultBucket.Arn'
-                  - !Sub '${TrimResultBucket.Arn}/*'
+                  - !GetAtt 'VideoSavedBucket.Arn'
+                  - !Sub '${VideoSavedBucket.Arn}/*'
                 Action:
                   - "s3:GetObject"
                   - "s3:PutObject"
                   - "s3:PutObjectAcl"
                   - "s3:GetObjectAcl"
                 
-              - Sid: TrimResultLookupTableReadWriteItemPolicy
+              - Sid: TrackInfoSavedTableReadWriteItemPolicy
                 Effect: Allow
-                Resource: !GetAtt TrimResultLookupTable.Arn
+                Resource: !GetAtt TrackInfoSavedTable.Arn
                 Action:
                   - "dynamodb:GetItem"
                   - "dynamodb:PutItem"
                   - "dynamodb:Query"
                   - "dynamodb:Scan"
 
-              - Sid: LambdaInvokeFunction
-                Effect: Allow
-                Resource: !GetAtt PreSignedURLGenerateFunction.Arn
-                Action:
-                  - "lambda:InvokeFunction"
-
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   
-  PreSignedURLGenerateFunctionExecutionRole:
+  TrackExtractStateMachineLaunchFunctionExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: PreSignedURLGenerateFunctionExecutionRole
+      RoleName: TrimLookupFunctionExecutionRole
       AssumeRolePolicyDocument:
-        Version: 2012-10-17
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -667,20 +666,108 @@ Resources:
             Action:
               - sts:AssumeRole
       Policies:
-        - PolicyName: LambdaTrimmedResultBucketReadOnlyPolicy
+        - PolicyName: TrackExtractStateMachineLaunchFunctionExecutionPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
-              - Sid: LambdaTrimmedResultBucketReadOnly
+              - Sid: StepFunctionLaunchPolicy
+                Effect: Allow
+                Resource: !GetAtt YoutubeVideoTrimStateMachine.Arn
+                Action:
+                  - "states:StopExecution"
+                  - "states:StartExecution"
+                  - "states:StartSyncExecution"
+              - Sid: StepFunctionJobSavedTableWritePolicy
+                Effect: Allow
+                Resource: !GetAtt StepFunctionJobSavedTable.Arn
+                Action:
+                  - "dynamodb:PutItem"
+                  # - "dynamodb:GetItem"
+                  # - "dynamodb:Query"
+                  # - "dynamodb:Scan"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  
+  TrackExtractStateMachineHealthcheckFunctionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TrimLookupFunctionExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: TrackExtractStateMachineHealthcheckFunctionExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: ExecutionDescribePolicy
+                Effect: Allow
+                Resource: !GetAtt YoutubeVideoTrimStateMachine.Arn
+                Action:
+                  - "states:DescribeExecution"
+
+              - Sid: TrackInfoSavedTableReadPolicy
+                Effect: Allow
+                Resource: !GetAtt TrackInfoSavedTable.Arn
+                Action:
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+              
+              - Sid: StepFunctionJobSavedTableReadDeletePolicy
+                Effect: Allow
+                Resource: !GetAtt StepFunctionJobSavedTable.Arn
+                Action:
+                  - "dynamodb:DeleteItem"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+
+
+  YoutubeVideoTrackDownloadStepFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: YoutubeVideoTrackDownloadStepFunctionRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - states.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: YoutubeVideoTrimStepFunctionLambdaExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: StepFunctionLambdaExecution
                 Effect: Allow
                 Action:
-                  - "s3:GetObject"
+                  - "lambda:InvokeFunction"
                 Resource:
-                  - !GetAtt TrimResultBucket.Arn
-                  - !Sub '${TrimResultBucket.Arn}/*'
+                  - !GetAtt TrimResultLookupFunction.Arn
+                  - !GetAtt TrackExtractStateMachineLaunchFunction.Arn
+                  - !GetAtt VideoUrlGenerateFunction.Arn
+                  - !GetAtt ErrorReceiveFunction.Arn
 
+              - Sid: XRayAccessPolicy
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                  - xray:GetSamplingRules
+                  - xray:GetSamplingTargets
+                Resource: "*"
       ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/service-role/AWSLambdaDynamoDBExecutionRole"
+        - "arn:aws:iam::aws:policy/CloudWatchFullAccess"
 
   YoutubeVideoTrimStepFunctionRole:
     Type: AWS::IAM::Role
@@ -705,14 +792,11 @@ Resources:
                 Action:
                   - "lambda:InvokeFunction"
                 Resource:
-                  - !GetAtt GetYoutubeVideoInfoFunction.Arn
                   - !GetAtt LiveTrimYoutubeVideoFunctionSmall.Arn
                   - !GetAtt LiveTrimYoutubeVideoFunctionMedium.Arn
                   - !GetAtt LiveTrimYoutubeVideoFunctionLarge.Arn
                   - !GetAtt LiveTrimYoutubeVideoFunctionXLarge.Arn
-                  - !GetAtt PreSignedURLGenerateFunction.Arn
-                  - !GetAtt TrimResultLookupFunction.Arn
-                  - !GetAtt ErrorReceiveFunction.Arn
+
               - Sid: XRayAccessPolicy
                 Effect: Allow
                 Action:
