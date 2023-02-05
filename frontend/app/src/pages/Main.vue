@@ -1,7 +1,7 @@
 <template>
     <div class="full-screen">
         <div class="flex signup-pannel justify-content-end">
-            <Button label="Sign Up" class="p-button-danger signup-button" />
+            <!-- <Button label="Sign Up" class="p-button-danger signup-button" /> -->
         </div>
         <div class="s006">
             <form>
@@ -14,9 +14,10 @@
                     </div>
                     <div class="inner-form fade-left-to-right">
                         <div>
-                            <div class="p-inputgroup" id="searchbar">
-                                <InputText placeholder="Input Youtube Video Link here" class="main-searchbar"/>
-                                <Button icon="pi pi-search" class="p-button-danger"/>
+                            <div class="p-inputgroup">
+                                <InputText placeholder="Input Youtube Video Link here" class="main-searchbar" v-model="this.videoLink" @:keyup="enterkey($event)"></InputText>
+                                <InputText style="display: none;"></InputText>
+                                <Button icon="pi pi-search" class="p-button-danger" v-on:click="queryYoutubeVideoInfo()"/>
                             </div>
                         </div>
                     </div>
@@ -39,7 +40,26 @@
 
 <script>
 export default {
-    name: 'Main'
+    name: 'Main',
+    methods:{
+        queryYoutubeVideoInfo(){
+            console.log(this.videoLink);
+            this.$router.push('/search?q='+this.videoLink);
+        },
+        enterkey(evt) {
+            if (evt.key === 'Enter') {
+                this.queryYoutubeVideoInfo()
+            }
+        }
+    },
+    data(){
+        return{
+            videoLink: ''
+        }
+    },
+    mounted(){
+        document.body.style.zoom = "75%";
+    }
 }
 </script>
 
@@ -51,15 +71,6 @@ export default {
 .p-button.p-button-danger{
     background:rgba(207,34,39,255);
     min-width: 60px;
-}
-
-.signup-button{
-    padding: 10px;
-    margin: 30px 30px 0px 0px;
-    height: 40px;
-    min-width: 100px !important;
-    background-color: rgb(254, 114, 114) !important;
-    border-radius: 20px;
 }
 
 .main-searchbar{

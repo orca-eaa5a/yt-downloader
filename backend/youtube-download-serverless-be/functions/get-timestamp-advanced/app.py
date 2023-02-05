@@ -24,12 +24,15 @@ def get_querystring_params(event, *args):
 def lambda_handler(event, context):
     resp = {
         'statusCode':400,
-        'success':False
+        'body':{
+            'success':False,
+            'data': None
+        }
     }
     params = get_querystring_params(event, 'url')
     if not params:
         logging.error('invalid parameter')
-        resp['err'] = 'invalid parameter'
+        resp['body']['err'] = 'invalid parameter'
         return resp
     
     vid = None
@@ -76,9 +79,9 @@ def lambda_handler(event, context):
                     'timestamp': r[0],
                     'tag': line.replace(r[0], "")
                 })
-        resp['data'] = data
+        resp['body']['success'] = True
+        resp['body']['data'] = data
         resp['statusCode'] = 200
-        resp['success'] = True
     else:
         logging.info('fail to request youtube comment threads ')
         resp['err'] = 'fail to get youtube comment thread'

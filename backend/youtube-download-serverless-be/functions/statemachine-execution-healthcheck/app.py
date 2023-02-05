@@ -20,20 +20,13 @@ CLOUDFRONT_DOMAIN = "d2h9qmde94lnl.cloudfront.net"
 
 def parameter_validation(event):
     required_params = ['ticket']
-    if 'body' not in event:
+    if not 'body' in event:
         return False
     for p in required_params:
-        if not p in event['body']:
+        if not p in event['body']['data']:
             return False
     return True
-
-def parameter_validation(params):
-    required_params = ['o_url', 'url', 'sp', 'ep', 'm_duration']
-    for p in required_params:
-        if not p in params:
-            return False
-    return True
-
+    
 def lambda_handler(event, context):
     resp = {
         'statusCode': 400,
@@ -47,7 +40,7 @@ def lambda_handler(event, context):
         resp['body']['err'] = "invalid parameter"
         return resp
     
-    ticket = event['body']['ticket']
+    ticket = event['body']['data']['ticket']
 
     dyn_client = get_dynamodb_client()
     query_result = dyn_get_item(
@@ -63,7 +56,7 @@ def lambda_handler(event, context):
         resp['body']['err'] = "there is no requested stepfunction execution"
         return resp
 
-    exec_arn = query_result['Item']['ExecutionArn']
+    exec_arn = query_result['Item']['ExecutionArn']['S']
     sfn_client = get_stepfunction_client()
     check_result = healthcheck_statemachine_execution(sfn_client, exec_arn)
     if not check_result:
@@ -80,7 +73,7 @@ def lambda_handler(event, context):
         }
         pass
     elif status == 'SUCCEEDED':
-        trackID = query_result['Item']['UniqueTrackID']
+        trackID = query_result['Item']['UniqueTrackID']['S']
         query_result = dyn_query(
             dyn_client=dyn_client,
             table_name=TRACKINFO_SAVED_TABLE,
@@ -108,7 +101,7 @@ def lambda_handler(event, context):
             resp['body']['err'] = "requested track is not invalid: {}".format(trackID)
             return resp
         
-        if dyn_delete_item(dyn_client, STEPFUNCTION_JOB_SAVED_TABLE, key={
+        if not dyn_delete_item(dyn_client, STEPFUNCTION_JOB_SAVED_TABLE, key={
             STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY: {
                 "S": ticket
             }
@@ -120,6 +113,8 @@ def lambda_handler(event, context):
         s3_key = track_item['S3Key']['S']
         # bucket = track_item['BucketName']['S']
 
+        resp['statusCode'] = 200
+        resp['body']['success'] = True
         resp['body']['data'] = {
             'status': status,
             'url': "{}/{}".format(CLOUDFRONT_DOMAIN, s3_key)
@@ -130,12 +125,25 @@ def lambda_handler(event, context):
             check_result['input'],
             check_result['output'],
         ))
-        resp['statusCode'] = 200
+        resp['statusCode'] = 400
         resp['body']['err'] = resp['output']
 
     return resp
 
-if __name__ =='__main__':
-    lambda_handler(event={
-        'ticket': ""
-    }, context=None)
+# if __name__ =='__main__':
+#     TRACKINFO_SAVED_TABLE = "TrackInfoSavedTable"
+#     STEPFUNCTION_JOB_SAVED_TABLE = "StepFunctionJobSavedTable"
+
+#     TRACKINFO_SAVED_TABLE_PARTITION_KEY = "VideoID"
+#     TRACKINFO_SAVED_TABLE_SORT_KEY = "Track"
+
+#     STEPFUNCTION_JOB_SAVED_TABLE_PARTITION_KEY = "ExecutionID"
+
+#     TRACKINFO_SAVED_TABLE_GSI = "UniqueTrackID"
+#     lambda_handler(event={
+#         "body":{
+#             "data":{
+#                 'ticket': "12028bcbefeba71783748716e68480ad9092debccc24e5024d562ba9741e5894"
+#             }
+#         }
+#     }, context=None)

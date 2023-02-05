@@ -62,7 +62,8 @@ def healthcheck_statemachine_execution(sfn_client, exec_arn):
         resp = sfn_client.describe_execution(executionArn=exec_arn)
     except Exception as e:
         logging.error("healthcheck_statemachine_execution got error with {}".format(str(e)))
-    
+        return None
+        
     if 'status' in resp:
         return resp
     return None

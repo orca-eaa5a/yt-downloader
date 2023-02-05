@@ -17,7 +17,7 @@ def dyn_get_item(dyn_client, table_name, key):
     try:
         resp = dyn_client.get_item(
             TableName=table_name,
-            Item=key)
+            Key=key)
     except Exception as e:
         logging.error("dynamodb get_item error with: {}".format(str(e)))
         return None

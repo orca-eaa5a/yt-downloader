@@ -36,6 +36,7 @@ def launch_stepfunction(sfn_client, input, sync=True):
         )
     except Exception as e:
         logging.error("start_execution got error with {}".format(str(e)))
+        return None, None
     if 'executionArn' in resp:
         # success to execute stepfunction
         execution_arn = resp['executionArn']

@@ -14,7 +14,7 @@ YOUTUBE_VIDEO_PREFIX = "https://youtube.com/watch?v="
 def normalize_timestr(time_str):
     timestamp = 0
     try:
-        time_arr = [int(f) for f in time_str.split(":")]
+        time_arr = [int(float(f)) for f in time_str.split(":")]
     except ValueError as ve:
         return None
     time_arr.reverse()
@@ -101,7 +101,7 @@ def lambda_handler(event, context):
                 }
             )
     
-    if 'Item' not in query_result:
+    if not query_result or not 'Item' in query_result:
         logging.info("dynamodb query: no item exists : key={} sortkey={}".format(video_id, track_range))
         resp['statusCode'] = 200
         resp['body']['data'] = params

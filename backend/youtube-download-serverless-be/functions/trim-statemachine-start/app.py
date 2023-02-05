@@ -11,10 +11,10 @@ TRACKINFO_SAVED_TABLE_GSI = os.environ.get('TRACKINFO_SAVED_TABLE_GSI')
 
 def parameter_validation(event):
     required_params = ['o_url', 'url', 'sp', 'ep', 'm_duration']
-    if 'body' not in event:
+    if not 'body' in event:
         return False
     for p in required_params:
-        if not p in event['body']:
+        if not p in event['body']['data']:
             return False
     return True
 
@@ -22,7 +22,7 @@ def generate_unique_trackid(url, sp, ep):
     def normalize_timestr(time_str):
         timestamp = 0
         try:
-            time_arr = [int(f) for f in time_str.split(":")]
+            time_arr = [int(float(f)) for f in time_str.split(":")]
         except ValueError as ve:
             return None
         time_arr.reverse()
@@ -33,6 +33,7 @@ def generate_unique_trackid(url, sp, ep):
     def extract_videoid(_url):
         regex = re.compile(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*")
         video_id = regex.search(_url).group(1)
+        return video_id
 
     video_id = extract_videoid(url)
     ep = normalize_timestr(ep)
@@ -61,15 +62,20 @@ def lambda_handler(event, context):
         logging.error("invalid parameter: {}".format(json.dumps(event)))
         resp['body']['err'] = "invalid parameter"
         return resp
-
+    
+    params = event['body']['data']
     sfn_client = get_stepfunction_client()
-    exec_arn, sha = launch_stepfunction(sfn_client, event['body'])
+    exec_arn, sha = launch_stepfunction(sfn_client, {
+        'body': {
+            'data': params
+        }
+    })
     if not exec_arn:
         logging.error("fail to launch stepfunction statemachine")
         resp['body']['err'] = "stepfunction launch failed"
         return resp
     
-    track_id = generate_unique_trackid(event['body']['o_url'], event['body']['sp'], event['body']['ep'])
+    track_id = generate_unique_trackid(params['o_url'], params['sp'], params['ep'])
     dyn_client = get_dynamodb_client()
     dyn_resp = dyn_put_item(
         dyn_client=dyn_client,
@@ -91,6 +97,7 @@ def lambda_handler(event, context):
     if not dyn_resp:
         resp['body']['err'] = "fail to save data at dynamodb"
     else:
+        resp['statusCode'] = 200
         resp['body']['success'] = True
         resp['body']['data'] = {
             'ticket': sha

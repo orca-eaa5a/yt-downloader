@@ -9,7 +9,7 @@ def parameter_validation(event):
     if 'body' not in event:
         return False
     for p in required_params:
-        if not p in event['body']:
+        if not p in event['body']['data']:
             return False
     return True
 
@@ -27,7 +27,7 @@ def lambda_handler(event, context):
         return resp
     
     resp['body']['data'] = {
-        'url': "{}/{}".format(CLOUDFRONT_DOMAIN, event['body']['s3_key'])
+        'url': "{}/{}".format(CLOUDFRONT_DOMAIN, event['body']['data']['s3_key'])
     }
     resp['statusCode'] = 200
     resp['body']['success'] = True

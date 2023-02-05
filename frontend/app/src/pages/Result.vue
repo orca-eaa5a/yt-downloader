@@ -213,7 +213,7 @@ export default {
 }
 .main-view{
     padding: 3rem 5rem;
-    height: calc(100vh - 120px);
+    height: calc(100% - 120px);
 }
 .video-layout{
     max-width: 100%;

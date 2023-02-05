@@ -26,6 +26,9 @@ import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Accordion from 'primevue/accordion';
 import AccordionTab from 'primevue/accordiontab';
+import RadioButton from 'primevue/radiobutton';
+import SelectButton from 'primevue/selectbutton';
+import ProgressSpinner from 'primevue/progressspinner';
 
 import "primevue/resources/themes/saga-blue/theme.css"; //theme
 import "primevue/resources/primevue.min.css"; //core CSS
@@ -51,5 +54,10 @@ app.component('Button', Button);
 app.component('Card', Card);
 app.component('Accordion', Accordion);
 app.component('AccordionTab', AccordionTab);
-app.config.globalProperties.url = "https://a1bf6b7b-9360-4775-9380-d97808c01c0b.mock.pstmn.io";
+app.component('RadioButton', RadioButton);
+app.component('SelectButton', SelectButton);
+app.component('ProgressSpinner', ProgressSpinner);
+
+// app.config.globalProperties.url = "https://a1bf6b7b-9360-4775-9380-d97808c01c0b.mock.pstmn.io";
+app.config.globalProperties.api_url = "https://4x0z0hafla.execute-api.ap-northeast-2.amazonaws.com/yt-download";
 

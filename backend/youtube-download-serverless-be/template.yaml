@@ -72,7 +72,7 @@ Resources:
             - AttributeName: !Ref TrackInfoSavedTableGSI
               KeyType: HASH
           Projection:
-            ProjectionType: KEYS_ONLY
+            ProjectionType: ALL
 
       BillingMode: PAY_PER_REQUEST
   
@@ -127,7 +127,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: VideoUrlGenerateFunction
-      CodeUri: functions/get-timestamp-advanced
+      CodeUri: functions/video-url-generator
       Handler: app.lambda_handler
       Runtime: python3.9
       Architectures:
@@ -193,6 +193,8 @@ Resources:
             !Ref StepFunctionJobSavedTablePartitionKey
           TRACKINFO_SAVED_TABLE_GSI:
             !Ref TrackInfoSavedTableGSI
+          STEPFUNCTION_ARN:
+            !GetAtt YoutubeVideoTrimStateMachine.Arn
     Metadata:
       SamResourceId: TrackExtractStateMachineLaunchFunction
 # --------------------------------------------------------------------------------- #
@@ -708,13 +710,15 @@ Resources:
             Statement:
               - Sid: ExecutionDescribePolicy
                 Effect: Allow
-                Resource: !GetAtt YoutubeVideoTrimStateMachine.Arn
+                Resource: "*"
                 Action:
                   - "states:DescribeExecution"
 
               - Sid: TrackInfoSavedTableReadPolicy
                 Effect: Allow
-                Resource: !GetAtt TrackInfoSavedTable.Arn
+                Resource: 
+                  - !GetAtt TrackInfoSavedTable.Arn
+                  - !Sub '${TrackInfoSavedTable.Arn}/*'
                 Action:
                   - "dynamodb:GetItem"
                   - "dynamodb:Query"
@@ -728,6 +732,8 @@ Resources:
                   - "dynamodb:GetItem"
                   - "dynamodb:Query"
                   - "dynamodb:Scan"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/CloudWatchFullAccess"
 
 
   YoutubeVideoTrackDownloadStepFunctionRole:
