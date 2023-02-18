@@ -94,15 +94,26 @@ Resources:
       
       BillingMode: PAY_PER_REQUEST
 
-  YoutubeTrimFailedAlert:
+  YoutubeTrimFailedAlertTopic:
     Type: AWS::SNS::Topic
     Properties:
       FifoTopic: false
-      TopicName: "YoutubeTrimFailedAlert"
-      DisplayName: "YoutubeTrimFailedAlert"
+      TopicName: "YoutubeTrimFailedAlertTopic"
+      DisplayName: "YoutubeTrimFailedAlertTopic"
       Subscription:
         - Endpoint: "orca_eaa5a@naver.com"
           Protocol: "email-json"
+  
+  BugReportTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      FifoTopic: false
+      TopicName: "BugReportTopic"
+      DisplayName: "BugReportTopic"
+      Subscription:
+        - Endpoint: "orca_eaa5a@naver.com"
+          Protocol: "email-json"
+
 
   EventBridgeToSNSTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -113,9 +124,9 @@ Resources:
           Principal:
             Service: events.amazonaws.com
           Action: sns:Publish
-          Resource: !Ref YoutubeTrimFailedAlert
+          Resource: !Ref YoutubeTrimFailedAlertTopic
       Topics: 
-        - !Ref YoutubeTrimFailedAlert 
+        - !Ref YoutubeTrimFailedAlertTopic 
 
   YoutubeTrimStateMachineMonitoringEvent:
     Type: AWS::Events::Rule
@@ -123,7 +134,7 @@ Resources:
       Name: "YoutubeTrimStateMachineMonitoringEvent"
       State: ENABLED
       Targets:
-        - Arn: !Ref YoutubeTrimFailedAlert
+        - Arn: !Ref YoutubeTrimFailedAlertTopic
           Id: "YoutubeTrimFailedAlertTopic"
       EventBusName: "default"
       EventPattern:
@@ -138,6 +149,20 @@ Resources:
             - ABORTED
           stateMachineArn: 
             - !GetAtt YoutubeVideoTrimStateMachine.Arn
+
+  BugReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: BugReportFunction
+      CodeUri: functions/report-bug
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN:
+            !Ref BugReportTopic
 
   GetTimestampsAboutYoutubeVideoFunction:
     Type: AWS::Serverless::Function
@@ -630,6 +655,33 @@ Resources:
 
 # --------------------------------------------------------------------------------- #
 
+  BugReportFunctionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: BugReportFunctionExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      # Policies:
+      #   - PolicyName: LambdaSNSTopicPublishPolicy
+      #     PolicyDocument:
+      #       Version: 2012-10-17
+      #       Statement:
+      #         - Sid: SNSTopicPublishPolicy
+      #           Effect: Allow
+      #           Resource: !GetAtt BugReportTopic.Arn
+      #           Action:
+      #             - "sns:Publish"
+          
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+
   TrimLookupFunctionExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -863,7 +915,4 @@ Resources:
 Outputs:
   YoutubeVideoTrimStateMachineArn:
     Description: Youtube Live Trim Function
-    Value:
-      Fn::GetAtt:
-      - YoutubeVideoTrimStateMachine
-      - Arn
+    Value: !GetAtt YoutubeVideoTrimStateMachine.Arn
