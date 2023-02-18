@@ -2,6 +2,7 @@
     <div class="full-screen">
         <div class="flex red-panel justify-content-end align-items-center">
             <Button label="메인으로" class="p-button-danger signup-button" v-on:click="this.gotoMain()"/>
+            <Button icon="pi pi-bell" class="p-button-rounded p-button-danger" style="margin-right: 30px;" v-on:click="this.openBugReportModal"/>
         </div>
         <div class="main-view">
             <div class="grid p-fluid w-100">
@@ -131,10 +132,18 @@
                 </div>
             </div>
             
-            <Dialog header="Header" :visible="downloadModalVisible" >
-                <p class="m-0">test</p>
+            <Dialog header="버그 리포트" :visible="bugreportModalVisible" >
+                <textarea v-model="reportMessage" style="width: 100%; height: 300px; padding: 0.7rem; font-size: 1.3rem;"></textarea>
                 <template #footer>
-                    <Button class="btn-sm-red" icon="pi pi-bars" label="취소" v-on:click="this.closeDownloadModal"/>
+                    <Button class="btn-sm-red" label="제출" v-on:click="this.submitBugReport"/>
+                    <Button class="p-button-outlined btn-sm-red" label="취소" v-on:click="this.closeBugReportModal"/>
+                </template>
+            </Dialog>
+
+            <Dialog header="1080p 다운로드" :visible="downloadModalVisible" >
+                <p style="text-align: center">아직 지원하지 않는 기능입니다..!</p>
+                <template #footer>
+                    <Button class="btn-sm-red" label="취소" v-on:click="this.closeDownloadModal"/>
                 </template>
             </Dialog>
         
@@ -174,8 +183,10 @@ export default {
                 start: '00:00:00',
                 end: '00:00:00',
             },
+            bugreportModalVisible: false,
             downloadModalVisible: false,
             progressModalVisible: false,
+            reportMessage: '',
             progressMessage:'',
             selectedVideoType: '',
             tpOptions:[
@@ -195,6 +206,12 @@ export default {
         },
         gotoMain(){
             this.$router.push('/');
+        },
+        openBugReportModal() {
+            this.bugreportModalVisible = true;
+        },
+        closeBugReportModal() {
+            this.bugreportModalVisible = false;
         },
         openDownloadModal() {
             this.downloadModalVisible = true;
@@ -368,7 +385,7 @@ export default {
                         }
                         else{
                             healthcheck_cnt += 1;
-                            await this.js_sleep(2000);
+                            await this.js_sleep(4000);
                         }
                     }
                     if(healthcheck_cnt>5){
@@ -415,6 +432,31 @@ export default {
             else{
                 alert('fail to crawal timestamp information : '+JSON.stringify(resp));
             }
+        },
+        submitBugReport(){
+            let aws_api = this.api_url + "/report-bug";
+            fetch(aws_api, {
+                method: "POST",
+                headers:{
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    data: {
+                        message:   this.reportMessage
+                    }
+                })
+            })
+            .then((resp) => resp.json())
+            .then((resp) => {
+                if(resp.statusCode === 200){
+                    alert('감사합니다! 버그리포트가 성공적으로 전송되었습니다');
+                }
+                else{
+                    console.log("fail to report bug");
+                    console.log(resp);
+                }
+            })
+            this.bugreportModalVisible = false;
         },
         async initVideoPlayer(){
             let resp = await fetch(this.api_url + "/query?q="+this.requestedVideo);
@@ -631,7 +673,7 @@ html{
 
 .signup-button{
     padding: 10px !important;
-    margin: 15px 30px 15px 15px !important;
+    margin-right: 15px!important;
     min-width: 100px !important;
     border-radius: 20px !important;
 }
