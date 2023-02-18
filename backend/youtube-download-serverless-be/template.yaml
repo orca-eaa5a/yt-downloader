@@ -157,6 +157,7 @@ Resources:
       CodeUri: functions/report-bug
       Handler: app.lambda_handler
       Runtime: python3.9
+      Role: !GetAtt BugReportFunctionExecutionRole.Arn
       Architectures:
       - x86_64
       Environment:
@@ -668,16 +669,16 @@ Resources:
                 - lambda.amazonaws.com
             Action:
               - sts:AssumeRole
-      # Policies:
-      #   - PolicyName: LambdaSNSTopicPublishPolicy
-      #     PolicyDocument:
-      #       Version: 2012-10-17
-      #       Statement:
-      #         - Sid: SNSTopicPublishPolicy
-      #           Effect: Allow
-      #           Resource: !GetAtt BugReportTopic.Arn
-      #           Action:
-      #             - "sns:Publish"
+      Policies:
+        - PolicyName: BugReportTopicPublishPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: SNSTopicPublishPolicy
+                Effect: Allow
+                Resource: !Ref BugReportTopic
+                Action:
+                  - "sns:Publish"
           
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
