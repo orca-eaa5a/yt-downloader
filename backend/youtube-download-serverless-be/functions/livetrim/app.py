@@ -122,6 +122,7 @@ def lambda_handler(event, context):
     try:
         out_file, m_sp = ffmpeg_sync(tmp_file_path, trim_result)
         if not out_file:
+            logging.error("ffmpeg_sync failed: {} / {}-{}".format(params['url'], params['sp'], params['ep']))
             resp['statusCode'] = 500
             resp['body']['err'] = "fail to process sync, internal sever error"
 
@@ -130,7 +131,7 @@ def lambda_handler(event, context):
     except Exception as e:
         resp['statusCode'] = 500
         resp['body']['err'] = "fail to process sync with error: {}".format(str(e))
-
+        logging.error("ffmpeg_sync failed: {} / {}-{} with error: {}".format(params['url'], params['sp'], params['ep'], str(e)))
         return resp
     
     if not s3_uploaded:
@@ -144,15 +145,15 @@ def lambda_handler(event, context):
     try:
         out_file = ffmpeg_cutoff_extra_times(tmp_file_path, s_sp, duration)
         if not out_file:
+            logging.error("ffmpeg_cutoff_extra_times failed: {} / {}-{}".format(params['url'], params['sp'], params['ep']))
             resp['statusCode'] = 500
             resp['body']['err'] = "fail to process cutoff extra frame"
-            logging.error(resp['body']['err'])
-
             return resp
 
         os.remove(tmp_file_path)
 
     except Exception as e:
+        logging.error("ffmpeg_cutoff_extra_times failed: {} / {}-{} with error: {}".format(params['url'], params['sp'], params['ep'], str(e)))
         resp['statusCode'] = 500
         resp['body']['err'] = "fail to process sync with error: {}".format(str(e))
 
@@ -209,7 +210,7 @@ def lambda_handler(event, context):
         }
     )
     if resp:
-        logging.info("trim result lookup is saved at DynamoDB")
+        logging.info("livetrim finished: {} / is saved at {}".format(result_s3_key, bucket_name))
         resp['statusCode'] = 200
         resp['body'] = {
             "success": True,
@@ -220,6 +221,7 @@ def lambda_handler(event, context):
             }
         }
     else:
+        logging.error("livetrim failed: {} / is not saved at {}".format(result_s3_key, bucket_name))
         resp['body']['err'] = "fail to save data at dynamodb"
     return resp
 
