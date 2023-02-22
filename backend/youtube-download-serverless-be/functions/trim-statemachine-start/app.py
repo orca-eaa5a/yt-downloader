@@ -76,7 +76,7 @@ def lambda_handler(event, context):
     if sp < 0 or ep <= 0 or (ep - sp) < 0:
         resp['body']['err'] = "invalid parameter"
         return resp
-    if (ep - sp) > 9*60*60: # 9min
+    if (ep - sp) > 9*60: # 9min
         resp['body']['err'] = "trim too large"
         return resp
     
