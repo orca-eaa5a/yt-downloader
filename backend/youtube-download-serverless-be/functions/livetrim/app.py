@@ -72,6 +72,7 @@ def lambda_handler(event, context):
         mp4_header, mdat, trim_result = modifier.livetrim(params['url'], sp, ep + 1.0, True)
     except Exception as e:
         resp['body']['err'] = "fail to process trimming with error: {}".format(str(e))
+
         logging.error("error at livetrim {}: source: ".format(e, params['o_url']))
         return resp
     
@@ -91,7 +92,7 @@ def lambda_handler(event, context):
     check raw size over 400mb
     then, write to s3 not temp
     """
-    tmp_file_name = hashlib.sha256(params['url'].encode()).hexdigest() + ".mp4"
+    tmp_file_name = hashlib.sha256("{}{}{}".format(int(sp), int(ep), params['url']).encode()).hexdigest() + ".mp4"
     used = get_directory_usage('/tmp')
     s3_uploaded = False
     if used >= (230 * 1024 * 1024): # if used lambda temporary space is over 230mb
@@ -158,7 +159,6 @@ def lambda_handler(event, context):
 
         return resp
     
-    out_file = "{}_{}-{}".format(out_file, int(sp),int(ep))
     result_s3_key = "{}/{}".format(result_path_s3_key, os.path.basename(out_file))
     try:
         region, bucket_name, s3_key = s3_upload_file_wrapper(
@@ -175,7 +175,7 @@ def lambda_handler(event, context):
             "success": False,
             "err": "fail to put object at {}".format(bucket_name)
         }
-        logging.error("fail to put object at {}/{} with {}".format(bucket_name, s3_key, str(e)))
+        logging.error("fail to put object at {}/{} with {}".format(bucket_name, result_s3_key, str(e)))
         return resp
         
     logging.info("trimmed result is uploaded at {}/{}".format(bucket_name, result_s3_key))
