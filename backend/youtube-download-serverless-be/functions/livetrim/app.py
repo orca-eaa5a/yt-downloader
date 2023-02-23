@@ -158,6 +158,7 @@ def lambda_handler(event, context):
 
         return resp
     
+    out_file = "{}_{}-{}".format(out_file, int(sp),int(ep))
     result_s3_key = "{}/{}".format(result_path_s3_key, os.path.basename(out_file))
     try:
         region, bucket_name, s3_key = s3_upload_file_wrapper(
