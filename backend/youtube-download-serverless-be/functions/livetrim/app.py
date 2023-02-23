@@ -58,12 +58,11 @@ def lambda_handler(event, context):
     parser = Mp4Parser()
     try:
         parser.stream_parse(params['url'])
+        parser.make_samples_info()
     except Exception as e:
         resp['body']['err'] = str(e)
-        logging.error("stream_parse.. {}".format(e))
+        logging.error("error at parse stream {}: source: ".format(e, params['o_url']))
         return resp
-
-    parser.make_samples_info()
 
     modifier = Mp4Modifier(parser)
     sp = conver_timestr_to_timestamp(params['sp'])
@@ -73,7 +72,8 @@ def lambda_handler(event, context):
         mp4_header, mdat, trim_result = modifier.livetrim(params['url'], sp, ep + 1.0, True)
     except Exception as e:
         resp['body']['err'] = "fail to process trimming with error: {}".format(str(e))
-        logging.error(resp['body']['err'])
+
+        logging.error("error at livetrim {}: source: ".format(e, params['o_url']))
         return resp
     
     raw = mp4_header + mdat
@@ -92,7 +92,7 @@ def lambda_handler(event, context):
     check raw size over 400mb
     then, write to s3 not temp
     """
-    tmp_file_name = hashlib.sha256(params['url'].encode()).hexdigest() + ".mp4"
+    tmp_file_name = hashlib.sha256("{}{}{}".format(int(sp), int(ep), params['url']).encode()).hexdigest() + ".mp4"
     used = get_directory_usage('/tmp')
     s3_uploaded = False
     if used >= (230 * 1024 * 1024): # if used lambda temporary space is over 230mb
@@ -122,6 +122,7 @@ def lambda_handler(event, context):
     try:
         out_file, m_sp = ffmpeg_sync(tmp_file_path, trim_result)
         if not out_file:
+            logging.error("ffmpeg_sync failed: {} / {}-{}".format(params['url'], params['sp'], params['ep']))
             resp['statusCode'] = 500
             resp['body']['err'] = "fail to process sync, internal sever error"
 
@@ -130,7 +131,7 @@ def lambda_handler(event, context):
     except Exception as e:
         resp['statusCode'] = 500
         resp['body']['err'] = "fail to process sync with error: {}".format(str(e))
-
+        logging.error("ffmpeg_sync failed: {} / {}-{} with error: {}".format(params['url'], params['sp'], params['ep'], str(e)))
         return resp
     
     if not s3_uploaded:
@@ -144,15 +145,15 @@ def lambda_handler(event, context):
     try:
         out_file = ffmpeg_cutoff_extra_times(tmp_file_path, s_sp, duration)
         if not out_file:
+            logging.error("ffmpeg_cutoff_extra_times failed: {} / {}-{}".format(params['url'], params['sp'], params['ep']))
             resp['statusCode'] = 500
             resp['body']['err'] = "fail to process cutoff extra frame"
-            logging.error(resp['body']['err'])
-
             return resp
 
         os.remove(tmp_file_path)
 
     except Exception as e:
+        logging.error("ffmpeg_cutoff_extra_times failed: {} / {}-{} with error: {}".format(params['url'], params['sp'], params['ep'], str(e)))
         resp['statusCode'] = 500
         resp['body']['err'] = "fail to process sync with error: {}".format(str(e))
 
@@ -174,7 +175,7 @@ def lambda_handler(event, context):
             "success": False,
             "err": "fail to put object at {}".format(bucket_name)
         }
-        logging.error("fail to put object at {}/{} with {}".format(bucket_name, s3_key, str(e)))
+        logging.error("fail to put object at {}/{} with {}".format(bucket_name, result_s3_key, str(e)))
         return resp
         
     logging.info("trimmed result is uploaded at {}/{}".format(bucket_name, result_s3_key))
@@ -209,7 +210,7 @@ def lambda_handler(event, context):
         }
     )
     if resp:
-        logging.info("trim result lookup is saved at DynamoDB")
+        logging.info("livetrim finished: {} / is saved at {}".format(result_s3_key, bucket_name))
         resp['statusCode'] = 200
         resp['body'] = {
             "success": True,
@@ -220,6 +221,7 @@ def lambda_handler(event, context):
             }
         }
     else:
+        logging.error("livetrim failed: {} / is not saved at {}".format(result_s3_key, bucket_name))
         resp['body']['err'] = "fail to save data at dynamodb"
     return resp
 

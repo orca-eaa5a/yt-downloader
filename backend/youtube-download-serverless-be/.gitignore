@@ -113,6 +113,7 @@ fabric.properties
 __pycache__/
 *.py[cod]
 *$py.class
+*debug*.py
 
 # C extensions
 *.so
@@ -241,4 +242,7 @@ $RECYCLE.BIN/
 
 */build/*
 
+# sam build configs
+*.toml
+.aws-sam/*
 # End of https://www.gitignore.io/api/osx,linux,python,windows,pycharm,visualstudiocode

@@ -13,10 +13,7 @@ YOUTUBE_VIDEO_PREFIX = "https://youtube.com/watch?v="
 
 def normalize_timestr(time_str):
     timestamp = 0
-    try:
-        time_arr = [int(float(f)) for f in time_str.split(":")]
-    except ValueError as ve:
-        return None
+    time_arr = [int(float(f)) for f in time_str.split(":")]
     time_arr.reverse()
     for n, t in enumerate(time_arr):
         timestamp += pow(60, n)*t
@@ -69,7 +66,7 @@ def lambda_handler(event, context):
         return resp
     
     # check parameter formats
-    timefmt_regex = re.compile(r'([0-9]+:)?[0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,3})?$')
+    timefmt_regex = re.compile(r'^(([0-9]+:)?[0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,3})?$)')
     if (not timefmt_regex.search(params['sp'])) or (not timefmt_regex.search(params['ep'])):
         resp['body']['err'] = "invalid parameter: {}".format("timestamp format")
         logging.error(resp['body']['err'])
@@ -83,10 +80,15 @@ def lambda_handler(event, context):
     else:
         # requested with youtube video id
         params['o_url'] = YOUTUBE_VIDEO_PREFIX + video_id
+
+    try:
+        track_range = "{}-{}".format(
+            normalize_timestr(params['sp']), normalize_timestr(params['ep'])
+        )
+    except Exception as e:
+        resp['body']['err'] = "invalid parameter: {}".format("timestamp format")
+        return resp
     
-    track_range = "{}-{}".format(
-        normalize_timestr(params['sp']), normalize_timestr(params['ep'])
-    )
     dyn_client = get_dynamodb_client()
     query_result = dyn_get_item(
                 dyn_client=dyn_client,

@@ -647,7 +647,7 @@ Resources:
       - python3.9
       ContentUri:
         Bucket: aws-sam-cli-managed-default-samclisourcebucket-26b0jbb1cg8w
-        Key: mp4parser-1.1a.zip
+        Key: mp4parser-1.3a.zip
       RetentionPolicy: Retain
     Metadata:
       SamResourceId: Mp4ParserLayer

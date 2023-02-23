@@ -201,7 +201,7 @@ export default {
             return new Promise((resolve) => setTimeout(resolve, ms))
         },
         timestampInputValidation(val){
-            const regex = /([0-9]+:)?[0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,3})?$/;
+            const regex = /^(([0-9]+:)?[0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,3})?$)/;
             return regex.test(val);
         },
         gotoMain(){
@@ -290,7 +290,9 @@ export default {
             });
         },
         full_download(video_url){
-            video_url = "https://"+video_url;
+            if(!video_url.startsWith('https://')){
+                video_url = "https://" + video_url;
+            }
             fetch(video_url, {
                 method: 'GET',
                 headers: {
@@ -351,6 +353,27 @@ export default {
             let aws_api = this.api_url + "/trim-request";
             //먼저 trim을 요청하는 API는 동기적으로 동작
             //-> trim이 제대로 요청되었는지 확인 필요!
+            let m_duration = this.timeStringToTimestamp(this.video_info.length)
+            if(!this.timestampInputValidation(this.trim.start)){
+                alert("시작점 입력 값을 확인해 주세요!");
+                return;
+            }
+            if(!this.timestampInputValidation(this.trim.end)){
+                alert("종료점 입력 값을 확인해 주세요!");
+                return;
+            }
+            if(!m_duration){
+                alert("모바일에서 사용하고 계신가요? 아직 모바일은 지원하지 않습니다.");
+                return;
+            }
+            if(!this.video_info.url){
+                alert("비디오 정보를 가져오는데 실패했어요! 새로고침후 시도해 보세요");
+                return;
+            }
+            if(!this.video_source){
+                alert("비디오 정보를 가져오는데 실패했어요! 새로고침을 시도해 보세요");
+                return;
+            }
             this.progressModalVisible = true;
             this.progressMessage = "자르기 요청 시작";
             let resp = await fetch(aws_api, {
@@ -410,10 +433,17 @@ export default {
             this.progressModalVisible = false;
         },
         async download_request(){
+            if(!this.timestampInputValidation(this.trim.start)){
+                alert("시작점 입력 값을 확인해 주세요!");
+                return;
+            }
+            if(!this.timestampInputValidation(this.trim.end)){
+                alert("종료점 입력 값을 확인해 주세요!");
+                return;
+            }
             let duration = this.timeStringToTimestamp(this.video_info.length);
             let ep = this.timeStringToTimestamp(this.trim.end);
             let sp = this.timeStringToTimestamp(this.trim.start);
-
             if((duration !== ep) || (sp !== 0)){
                 this.trim_request();
             }

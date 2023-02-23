@@ -18,18 +18,16 @@ def parameter_validation(event):
             return False
     return True
 
+def normalize_timestr(time_str):
+    timestamp = 0
+    time_arr = [int(float(f)) for f in time_str.split(":")]
+    time_arr.reverse()
+    for n, t in enumerate(time_arr):
+        timestamp += pow(60, n)*t
+    
+    return timestamp
+
 def generate_unique_trackid(url, sp, ep):
-    def normalize_timestr(time_str):
-        timestamp = 0
-        try:
-            time_arr = [int(float(f)) for f in time_str.split(":")]
-        except ValueError as ve:
-            return None
-        time_arr.reverse()
-        for n, t in enumerate(time_arr):
-            timestamp += pow(60, n)*t
-        
-        return timestamp
     def extract_videoid(_url):
         regex = re.compile(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*")
         video_id = regex.search(_url).group(1)
@@ -41,8 +39,6 @@ def generate_unique_trackid(url, sp, ep):
     track_time = "{}-{}".format(sp, ep)
 
     return hashlib.sha256("{}:{}".format(video_id, track_time).encode()).hexdigest()
-
-
 
 def lambda_handler(event, context):
     """
@@ -64,6 +60,26 @@ def lambda_handler(event, context):
         return resp
     
     params = event['body']['data']
+    # check parameter formats
+    timefmt_regex = re.compile(r'^(([0-9]+:)?[0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,3})?$)')
+    if (not timefmt_regex.search(params['sp'])) or (not timefmt_regex.search(params['ep'])):
+        resp['body']['err'] = "invalid parameter: {}".format("timestamp format")
+        logging.error(resp['body']['err'])
+        return resp
+    
+    try:
+        sp = normalize_timestr(params['sp'])
+        ep = normalize_timestr(params['ep'])
+    except Exception as e:
+        resp['body']['err'] = "invalid parameter"
+        return resp
+    if sp < 0 or ep <= 0 or (ep - sp) < 0:
+        resp['body']['err'] = "invalid parameter"
+        return resp
+    if (ep - sp) > 9*60: # 9min
+        resp['body']['err'] = "trim too large"
+        return resp
+    
     sfn_client = get_stepfunction_client()
     exec_arn, sha = launch_stepfunction(sfn_client, {
         'body': {
@@ -75,6 +91,8 @@ def lambda_handler(event, context):
         resp['body']['err'] = "stepfunction launch failed"
         return resp
     
+    logging.info("new trim job started : {} {}-{}".format(params['o_url'], params['sp'], params['ep']))
+
     track_id = generate_unique_trackid(params['o_url'], params['sp'], params['ep'])
     dyn_client = get_dynamodb_client()
     dyn_resp = dyn_put_item(
@@ -95,6 +113,7 @@ def lambda_handler(event, context):
         })
     
     if not dyn_resp:
+        logging.error("dynamodb saved stepfunction job failed : {} {}-{}".format(params['o_url'], params['sp'], params['ep']))
         resp['body']['err'] = "fail to save data at dynamodb"
     else:
         resp['statusCode'] = 200
