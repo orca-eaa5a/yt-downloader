@@ -66,7 +66,7 @@ def lambda_handler(event, context):
         return resp
     
     # check parameter formats
-    timefmt_regex = re.compile(r'([0-9]+:)?[0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,3})?$')
+    timefmt_regex = re.compile(r'^(([0-9]+:)?[0-5]?[0-9]:[0-5][0-9](\.[0-9]{1,3})?$)')
     if (not timefmt_regex.search(params['sp'])) or (not timefmt_regex.search(params['ep'])):
         resp['body']['err'] = "invalid parameter: {}".format("timestamp format")
         logging.error(resp['body']['err'])

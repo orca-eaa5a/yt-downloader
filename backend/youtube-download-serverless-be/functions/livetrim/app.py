@@ -58,12 +58,11 @@ def lambda_handler(event, context):
     parser = Mp4Parser()
     try:
         parser.stream_parse(params['url'])
+        parser.make_samples_info()
     except Exception as e:
         resp['body']['err'] = str(e)
-        logging.error("stream_parse.. {}".format(e))
+        logging.error("error at parse stream {}: source: ".format(e, params['o_url']))
         return resp
-
-    parser.make_samples_info()
 
     modifier = Mp4Modifier(parser)
     sp = conver_timestr_to_timestamp(params['sp'])
@@ -73,7 +72,7 @@ def lambda_handler(event, context):
         mp4_header, mdat, trim_result = modifier.livetrim(params['url'], sp, ep + 1.0, True)
     except Exception as e:
         resp['body']['err'] = "fail to process trimming with error: {}".format(str(e))
-        logging.error(resp['body']['err'])
+        logging.error("error at livetrim {}: source: ".format(e, params['o_url']))
         return resp
     
     raw = mp4_header + mdat
